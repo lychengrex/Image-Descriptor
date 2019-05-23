@@ -5,12 +5,14 @@ import glob
 import pickle
 from data import data_loader
 from build_vocab import Vocabulary
+import torchvision.transforms as transforms
+from PIL import Image
 
 import torch
 import torch.nn as nn
 import torchvision.models as models
 from torch.nn.utils.rnn import pack_padded_sequence
-from torch.autograd import Variable 
+from torch.autograd import Variable
 
 
 class EncoderCNN(nn.Module):
@@ -39,6 +41,7 @@ class EncoderCNN(nn.Module):
             # return features, cnn_features
             with torch.no_grad():
                 features = self.resnet(images)
+            features = features.data
             features = features.reshape(features.size(0), -1)
             cnn_features = features
             features = self.bn(self.linear(features))
@@ -84,12 +87,14 @@ class DecoderRNN(nn.Module):
         embeddings = torch.cat((features.unsqueeze(1), embeddings), 1)
 
         if not self.attention_mechanism:
-            packed = pack_padded_sequence(embeddings, lengths, batch_first=True)
+            packed = pack_padded_sequence(
+                embeddings, lengths, batch_first=True)
             hiddens, _ = self.lstm(packed)
             outputs = self.linear(hiddens[0])
             return outputs
 
-        packed_seq = pack_padded_sequence(embeddings, lengths, batch_first=True)
+        packed_seq = pack_padded_sequence(
+            embeddings, lengths, batch_first=True)
         packed = packed_seq.data
         batch_sizes = packed_seq.batch_sizes
 
@@ -128,15 +133,20 @@ class DecoderRNN(nn.Module):
 
         if not self.attention_mechanism:
             for i in range(self.max_seg_length):
-                hiddens, states = self.lstm(inputs, states)          # hiddens: (batch_size, 1, hidden_size)
-                outputs = self.linear(hiddens.squeeze(1))            # outputs:  (batch_size, vocab_size)
-                _, predicted = outputs.max(1)                        # predicted: (batch_size)
+                # hiddens: (batch_size, 1, hidden_size)
+                hiddens, states = self.lstm(inputs, states)
+                # outputs:  (batch_size, vocab_size)
+                outputs = self.linear(hiddens.squeeze(1))
+                # predicted: (batch_size)
+                _, predicted = outputs.max(1)
                 sampled_ids.append(predicted)
-                inputs = self.embed(predicted)                       # inputs: (batch_size, embed_size)
-                inputs = inputs.unsqueeze(1)                         # inputs: (batch_size, 1, embed_size)
-            sampled_ids = torch.stack(sampled_ids, 1)                # sampled_ids: (batch_size, max_seq_length)
+                # inputs: (batch_size, embed_size)
+                inputs = self.embed(predicted)
+                # inputs: (batch_size, 1, embed_size)
+                inputs = inputs.unsqueeze(1)
+            # sampled_ids: (batch_size, max_seq_length)
+            sampled_ids = torch.stack(sampled_ids, 1)
             return sampled_ids
-
 
         batch_size = features.size(0)
 
@@ -167,7 +177,6 @@ class DecoderRNN(nn.Module):
             inputs = self.embed(predicted)
             # inputs: (batch_size, 1, embed_size)
             inputs = inputs.unsqueeze(1)
-        # sampled_ids = torch.stack(sampled_ids, 1)                # sampled_ids: (batch_size, max_seq_length)
         # (batch_size, 20)
         sampled_ids = torch.cat(sampled_ids, 0)
         return sampled_ids.squeeze()
@@ -195,9 +204,13 @@ class Args():
         self.num_workers = num_workers
         self.learning_rate = learning_rate
 
+
 class ImageDescriptor():
-    def __init__(self, args=None, attention_mechanism=False):
-        if not args or not args.enable:
+    def __init__(self, args=None, attention_mechanism=False, mode='train'):
+        assert(isinstance(mode, str))
+        assert(mode == 'train'or'eval')
+        self.__mode = mode
+        if not args:
             args = Args()
         self.__args = args
         self.__history = []
@@ -205,8 +218,12 @@ class ImageDescriptor():
 
         if not os.path.exists(args.model_path):
             os.makedirs(args.model_path)
+            if mode == 'eval':
+                raise FileNotFoundError('No checkpoint exists.')
 
         self.__config_path = os.path.join(args.model_path, "config.txt")
+        self.__model_path = max(
+            glob.iglob(os.path.join(args.model_path, '*.ckpt')), key=os.path.getctime)
 
         # Device configuration
         self.__device = torch.device(
@@ -215,36 +232,42 @@ class ImageDescriptor():
         with open(args.vocab_path, 'rb') as f:
             self.__vocab = pickle.load(f)
 
-        self.__data_loader = data_loader(args.image_dir, args.caption_path, self.__vocab, args.batch_size,
-                             shuffle=True, num_workers=args.num_workers)
-        # Build the models
-        self.__encoder = EncoderCNN(args.embed_size, attention_mechanism=attention_mechanism).to(self.__device)
-        self.__decoder = DecoderRNN(args.embed_size, args.hidden_size,
-                                    len(self.__vocab), args.num_layers, attention_mechanism=attention_mechanism).to(self.__device)
-        
-
-        # Loss and optimizer
-        self.__criterion = nn.CrossEntropyLoss()
-        self.__params = list(self.__decoder.parameters(
-        )) + list(self.__encoder.linear.parameters()) + list(self.__encoder.bn.parameters())
-        self.__optimizer = torch.optim.Adam(
-            self.__params, lr=args.learning_rate)
-
-        # Load checkpoint and check compatibility
-        if os.path.isfile(self.__config_path):
-            self.__model_path = max(
-                glob.iglob(os.path.join(args.model_path, '*.ckpt')), key=os.path.getctime)
-            with open(self.__config_path, 'r') as f:
-                content = f.read()[:-1]
-                if content != repr(self):
-                    print(f'f.read():\n{content}')
-                    print(f'repr(self):\n{repr(self)}')
-                    raise ValueError(
-                        "Cannot create this experiment: "
-                        "I found a checkpoint conflicting with the current setting.")
+        if mode == 'eval':
+            self.__encoder = EncoderCNN(
+                args.embed_size, attention_mechanism=attention_mechanism).eval().to(self.__device)
+            self.__decoder = DecoderRNN(args.embed_size, args.hidden_size, len(
+                self.__vocab), args.num_layers, attention_mechanism=attention_mechanism).to(self.__device)
             self.load()
-        # else:
-        #     self.save()
+        else:
+            self.__data_loader = data_loader(args.image_dir, args.caption_path, self.__vocab, args.batch_size,
+                                             shuffle=True, num_workers=args.num_workers)
+            # Build the models
+            self.__encoder = EncoderCNN(
+                args.embed_size, attention_mechanism=attention_mechanism).to(self.__device)
+            self.__decoder = DecoderRNN(args.embed_size, args.hidden_size,
+                                        len(self.__vocab), args.num_layers, attention_mechanism=attention_mechanism).to(self.__device)
+
+            # Loss and optimizer
+            self.__criterion = nn.CrossEntropyLoss()
+            self.__params = list(self.__decoder.parameters(
+            )) + list(self.__encoder.linear.parameters()) + list(self.__encoder.bn.parameters())
+            self.__optimizer = torch.optim.Adam(
+                self.__params, lr=args.learning_rate)
+
+            # Load checkpoint and check compatibility
+            if os.path.isfile(self.__config_path):
+                with open(self.__config_path, 'r') as f:
+                    content = f.read()[:-1]
+                    if content != repr(self):
+                        print(f'f.read():\n{content}')
+                        print(f'repr(self):\n{repr(self)}')
+                        raise ValueError(
+                            "Cannot create this experiment: "
+                            "I found a checkpoint conflicting with the current setting.")
+                self.load()
+            # else:
+            #     self.save()
+            
 
     def setting(self):
         '''
@@ -296,16 +319,17 @@ class ImageDescriptor():
         """Loads the experiment from the input checkpoint."""
         self.__encoder.load_state_dict(checkpoint['Net'][0])
         self.__decoder.load_state_dict(checkpoint['Net'][1])
-        self.__optimizer.load_state_dict(checkpoint['Optimizer'])
-        self.__history = checkpoint['History']
+        if self.__mode == 'train':
+            self.__optimizer.load_state_dict(checkpoint['Optimizer'])
+            self.__history = checkpoint['History']
 
-        # The following loops are used to fix a bug that was
-        # discussed here: https://github.com/pytorch/pytorch/issues/2830
-        # (it is supposed to be fixed in recent PyTorch version)
-        for state in self.__optimizer.state.values():
-            for k, v in state.items():
-                if isinstance(v, torch.Tensor):
-                    state[k] = v.to(self.__device)
+            # The following loops are used to fix a bug that was
+            # discussed here: https://github.com/pytorch/pytorch/issues/2830
+            # (it is supposed to be fixed in recent PyTorch version)
+            for state in self.__optimizer.state.values():
+                for k, v in state.items():
+                    if isinstance(v, torch.Tensor):
+                        state[k] = v.to(self.__device)
 
     def train(self):
         total_step = len(self.__data_loader)
@@ -319,11 +343,13 @@ class ImageDescriptor():
                     images = images.to(self.__device)
                     captions = captions.to(self.__device)
                 else:
-                    images = images.to(self.__device)
+                    with torch.no_grad():
+                        images = images.to(self.__device)
                     captions = captions.to(self.__device)
                     # images = Variable(images.to(self.__device), volatile=True)
                     # captions = Variable(captions.to(self.__device), volatile=False)
-                targets = pack_padded_sequence(captions, lengths, batch_first=True)[0]
+                targets = pack_padded_sequence(
+                    captions, lengths, batch_first=True)[0]
 
                 # Forward, backward and optimize
                 if not self.__attention_mechanism:
@@ -335,9 +361,10 @@ class ImageDescriptor():
                     self.__encoder.zero_grad()
                     self.__decoder.zero_grad()
                     features, cnn_features = self.__encoder(images)
-                    outputs = self.__decoder(features, captions, lengths, cnn_features=cnn_features)
+                    outputs = self.__decoder(
+                        features, captions, lengths, cnn_features=cnn_features)
                 loss = self.__criterion(outputs, targets)
-                
+
                 loss.backward()
                 self.__optimizer.step()
 
@@ -351,3 +378,57 @@ class ImageDescriptor():
             print("Epoch {} (Time: {:.2f}s)".format(
                 self.epoch, time.time() - t_start))
             self.save()
+
+    def mode(self, mode=None):
+        '''
+        Get the current mode or change mode.
+        '''
+        if not mode:
+            return self.__mode
+        self.__mode = mode
+
+    def __load_image(self, image_path):
+        image = Image.open(image_path)
+        image = image.resize([224, 224], Image.LANCZOS)
+
+        transform = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize((0.485, 0.456, 0.406),
+                                 (0.229, 0.224, 0.225))])
+        image = transform(image).unsqueeze(0)
+
+        return image
+
+    def evaluate(self, image_path, plot=False):
+        if self.__mode == 'train':
+            raise ValueError('Please switch to eval mode.')
+        if not self.__args.image_path:
+            raise FileNotFoundError('Please provide the image path.')
+        
+        img = self.__load_image(image_path).to(self.__device)
+
+        # generate an caption
+        if not self.__attention_mechanism:
+            feature = self.__encoder(img)
+            sampled_ids = self.__decoder.sample(feature)
+            sampled_ids = sampled_ids[0].cpu().numpy()  
+        else:
+            feature, cnn_features = self.__encoder(img)
+            sampled_ids = self.__decoder.sample(feature, cnn_features)
+            sampled_ids = sampled_ids.cpu().data.numpy()
+
+        # Convert word_ids to words
+        sampled_caption = []
+        for word_id in sampled_ids:
+            word = self.__vocab.idx2word[word_id]
+            sampled_caption.append(word)
+            if word == '<end>':
+                break
+        sentence = ' '.join(sampled_caption)
+        
+        # Print out the image and the generated caption
+        print (sentence)
+
+        if plot:
+            image = Image.open(args.image)
+            plt.imshow(np.asarray(image))
