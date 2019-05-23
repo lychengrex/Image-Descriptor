@@ -225,8 +225,7 @@ class ImageDescriptor():
                 raise FileNotFoundError('No checkpoint exists.')
 
         self.__config_path = os.path.join(args.model_path, "config.txt")
-        self.__model_path = max(
-            glob.iglob(os.path.join(args.model_path, '*.ckpt')), key=os.path.getctime)
+        
 
         # Device configuration
         self.__device = torch.device(
@@ -270,7 +269,6 @@ class ImageDescriptor():
                 self.load()
             # else:
             #     self.save()
-            
 
     def setting(self):
         '''
@@ -305,15 +303,17 @@ class ImageDescriptor():
         #     self.__args.model_path, 'decoder-{}-{}.ckpt'.format(self.__epoch+1, self.__i+1)))
         # torch.save(self.__encoder.state_dict(), os.path.join(
         #     self.__args.model_path, 'encoder-{}-{}.ckpt'.format(self.__epoch+1, self.__i+1)))
-        self.__model_path = os.path.join(
+        model_path = os.path.join(
             self.__args.model_path, 'epoch-{}.ckpt'.format(self.epoch))
-        torch.save(self.state_dict(), self.__model_path)
+        torch.save(self.state_dict(), model_path)
         with open(self.__config_path, 'w') as f:
             print(self, file=f)
 
     def load(self):
         """Loads the experiment from the last checkpoint saved on disk."""
-        checkpoint = torch.load(self.__model_path,
+        model_path = max(
+            glob.iglob(os.path.join(self.__args.model_path, '*.ckpt')), key=os.path.getctime)
+        checkpoint = torch.load(model_path,
                                 map_location=self.__device)
         self.load_state_dict(checkpoint)
         del checkpoint
@@ -407,14 +407,14 @@ class ImageDescriptor():
             raise ValueError('Please switch to eval mode.')
         if not self.__args.image_path:
             image_path = self.__args.image_path
-        
+
         img = self.__load_image(image_path).to(self.__device)
 
         # generate an caption
         if not self.__attention_mechanism:
             feature = self.__encoder(img)
             sampled_ids = self.__decoder.sample(feature)
-            sampled_ids = sampled_ids[0].cpu().numpy()  
+            sampled_ids = sampled_ids[0].cpu().numpy()
         else:
             feature, cnn_features = self.__encoder(img)
             sampled_ids = self.__decoder.sample(feature, cnn_features)
@@ -428,9 +428,9 @@ class ImageDescriptor():
             if word == '<end>':
                 break
         sentence = ' '.join(sampled_caption)
-        
+
         # Print out the image and the generated caption
-        print (sentence)
+        print(sentence)
 
         if plot:
             image = Image.open(image_path)

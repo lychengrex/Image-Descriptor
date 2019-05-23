@@ -3,11 +3,13 @@ import pickle
 from model import ImageDescriptor
 from build_vocab import Vocabulary
 
+
 def main(args):
-    img_descriptor = ImageDescriptor(args=args, attention_mechanism=True, mode=args.mode)
+    img_descriptor = ImageDescriptor(
+        args=args, attention_mechanism=True, mode=args.mode)
     if args.mode == 'train':
         img_descriptor.train()
-    elif args.mode =='eval':
+    elif args.mode == 'eval':
         img_descriptor.evaluate(args.image_path, plot=args.plot)
     else:
         raise ValueError('Invalid mode.')
