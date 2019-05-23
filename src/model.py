@@ -7,6 +7,7 @@ from data import data_loader
 from build_vocab import Vocabulary
 import torchvision.transforms as transforms
 from PIL import Image
+import matplotlib.pyplot as plt
 
 import torch
 import torch.nn as nn
@@ -185,13 +186,15 @@ class DecoderRNN(nn.Module):
 class Args():
     def __init__(self, log_step=10, save_step=1000, embed_size=256, hidden_size=512,
                  num_layers=1, num_epochs=5, batch_size=128, num_workers=2, learning_rate=0.001,
-                 model_path='models/', vocab_path='data/vocab.pkl', image_dir='data/resized2014',
+                 model_path='models/', vocab_path='data/vocab.pkl', image_path='png/example.png', plot=False, image_dir='data/resized2014',
                  caption_path='data/annotations/captions_train2014.json'):
         '''
         For jupyter notebook
         '''
         self.model_path = model_path
         self.vocab_path = vocab_path
+        self.image_path = image_path
+        self.plot = plot
         self.image_dir = image_dir
         self.caption_path = caption_path
         self.log_step = log_step
@@ -399,11 +402,11 @@ class ImageDescriptor():
 
         return image
 
-    def evaluate(self, image_path, plot=False):
+    def evaluate(self, image_path=None, plot=False):
         if self.__mode == 'train':
             raise ValueError('Please switch to eval mode.')
         if not self.__args.image_path:
-            raise FileNotFoundError('Please provide the image path.')
+            image_path = self.__args.image_path
         
         img = self.__load_image(image_path).to(self.__device)
 
@@ -430,5 +433,5 @@ class ImageDescriptor():
         print (sentence)
 
         if plot:
-            image = Image.open(args.image)
+            image = Image.open(image_path)
             plt.imshow(np.asarray(image))
