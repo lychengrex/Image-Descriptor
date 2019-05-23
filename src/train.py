@@ -1,39 +1,18 @@
 import argparse
-import torch
-import torch.nn as nn
-import numpy as np
-import time
-import os
-import glob
 import pickle
-from preprop import CocoDataset, collate_fn
+from model import ImageDescriptor
 from build_vocab import Vocabulary
-from model import EncoderCNN, DecoderRNN
-from torch.nn.utils.rnn import pack_padded_sequence
-from torchvision import transforms
+
+def main(args):
+    
+    img_descriptor = ImageDescriptor(args)
+    img_descriptor.train()
 
 
-class Args():
-    def __init__(self):
-        '''
-        For jupyter notebook
-        '''
-        self.model_path = 'models/'
-        self.vocab_path = 'data/vocab.pkl'
-        self.image_dir = 'data/resized2014'
-        self.caption_path = 'data/annotations/captions_train2014.json'
-        self.log_step = 10
-        self.save_step = 1000
-        self.embed_size = 256
-        self.hidden_size = 512
-        self.num_layers = 1
-        self.num_epochs = 5
-        self.batch_size = 128
-        self.num_workers = 2
-        self.learning_rate = 0.001
-
-def parser_args():
+if __name__ == '__main__':
     parser = argparse.ArgumentParser()
+    parser.add_argument('--enable', type=bool,
+                        default=False, help='enable parser or not')
     parser.add_argument('--model_path', type=str,
                         default='models/', help='path for saving trained models')
     # parser.add_argument('--crop_size', type=int, default=224 , help='size for randomly cropping images')
@@ -60,20 +39,6 @@ def parser_args():
     parser.add_argument('--batch_size', type=int, default=128)
     parser.add_argument('--num_workers', type=int, default=2)
     parser.add_argument('--learning_rate', type=float, default=0.001)
-
-    return parser.parse_args()
-
-def main(args):
-
-    dataset = CocoDataset(root=args.image_dir,
-                                json=args.caption_path, vocab=self.__vocab)
-
-    exp = Experiement(args)
-    exp.run()
-
-
-if __name__ == '__main__':
-    
     args = parser.parse_args()
     print(args)
     main(args)
