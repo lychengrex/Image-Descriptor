@@ -5,7 +5,7 @@ from build_vocab import Vocabulary
 
 def main(args):
     
-    img_descriptor = ImageDescriptor(args)
+    img_descriptor = ImageDescriptor(args, attention_mechanism=True)
     img_descriptor.train()
 
 

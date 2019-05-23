@@ -31,9 +31,15 @@ class EncoderCNN(nn.Module):
     def forward(self, images):
         """Extract feature vectors from input images."""
         if self.attention_mechanism:
-            features = self.resnet(images)
-            features = Variable(features.data)
-            features = features.view(features.size(0), -1)
+            # features = self.resnet(images)
+            # features = Variable(features.data)
+            # features = features.view(features.size(0), -1)
+            # cnn_features = features
+            # features = self.bn(self.linear(features))
+            # return features, cnn_features
+            with torch.no_grad():
+                features = self.resnet(images)
+            features = features.reshape(features.size(0), -1)
             cnn_features = features
             features = self.bn(self.linear(features))
             return features, cnn_features
@@ -83,7 +89,9 @@ class DecoderRNN(nn.Module):
             outputs = self.linear(hiddens[0])
             return outputs
 
-        packed, batch_sizes = pack_padded_sequence(embeddings, lengths, batch_first=True)
+        packed_seq = pack_padded_sequence(embeddings, lengths, batch_first=True)
+        packed = packed_seq.data
+        batch_sizes = packed_seq.batch_sizes
 
         hiddenStates = None
         start = 0
@@ -311,8 +319,10 @@ class ImageDescriptor():
                     images = images.to(self.__device)
                     captions = captions.to(self.__device)
                 else:
-                    images = Variable(images.to(self.__device), volatile=True)
-                    captions = Variable(captions.to(self.__device), volatile=False)
+                    images = images.to(self.__device)
+                    captions = captions.to(self.__device)
+                    # images = Variable(images.to(self.__device), volatile=True)
+                    # captions = Variable(captions.to(self.__device), volatile=False)
                 targets = pack_padded_sequence(captions, lengths, batch_first=True)[0]
 
                 # Forward, backward and optimize
