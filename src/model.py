@@ -405,7 +405,7 @@ class ImageDescriptor():
     def evaluate(self, image_path=None, plot=False):
         if self.__mode == 'train':
             raise ValueError('Please switch to eval mode.')
-        if not self.__args.image_path:
+        if not image_path:
             image_path = self.__args.image_path
 
         img = self.__load_image(image_path).to(self.__device)
