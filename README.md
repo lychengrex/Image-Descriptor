@@ -43,4 +43,22 @@ chmod +x download_dataset.sh
 ./download_dataset.sh
 ```
 
-4. 
+4. Preprocessing
+
+```
+$ python -c "import nltk; nltk.download('punkt')"
+$ python build_vocab.py   
+$ python resize.py
+```
+
+5. Train the model in the background save log file  
+
+```
+$ nohup python train.py > log.txt &  
+```
+
+6. Test the model  
+
+```
+$ python sample.py --image='png/example.png' 
+```

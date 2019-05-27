@@ -225,7 +225,6 @@ class ImageDescriptor():
                 raise FileNotFoundError('No checkpoint exists.')
 
         self.__config_path = os.path.join(args.model_path, "config.txt")
-        
 
         # Device configuration
         self.__device = torch.device(
@@ -283,26 +282,28 @@ class ImageDescriptor():
         return len(self.__history)
 
     def __repr__(self):
-        """Pretty printer showing the setting of the experiment. This is what
-        is displayed when doing ``print(experiment)``. This is also what is
-        saved in the ``config.txt`` file.
-        """
+        '''
+        Pretty printer showing the setting of the experiment. This is what
+        is displayed when doing `print(experiment). This is also what is
+        saved in the `config.txt file.
+        '''
         string = ''
         for key, val in self.setting().items():
             string += '{}({})\n'.format(key, val)
         return string
 
     def state_dict(self):
-        """Returns the current state of the experiment."""
+        '''
+        Returns the current state of the experiment.
+        '''
         return {'Net': (self.__encoder.state_dict(), self.__decoder.state_dict()),
                 'Optimizer': self.__optimizer.state_dict(),
                 'History': self.__history}
 
     def save(self):
-        # torch.save(self.__decoder.state_dict(), os.path.join(
-        #     self.__args.model_path, 'decoder-{}-{}.ckpt'.format(self.__epoch+1, self.__i+1)))
-        # torch.save(self.__encoder.state_dict(), os.path.join(
-        #     self.__args.model_path, 'encoder-{}-{}.ckpt'.format(self.__epoch+1, self.__i+1)))
+        '''
+        Saves the experiment on disk, i.e, create/update the last checkpoint.
+        '''
         model_path = os.path.join(
             self.__args.model_path, 'epoch-{}.ckpt'.format(self.epoch))
         torch.save(self.state_dict(), model_path)
@@ -310,7 +311,9 @@ class ImageDescriptor():
             print(self, file=f)
 
     def load(self):
-        """Loads the experiment from the last checkpoint saved on disk."""
+        '''
+        Loads the experiment from the last checkpoint saved on disk.
+        '''
         model_path = max(
             glob.iglob(os.path.join(self.__args.model_path, '*.ckpt')), key=os.path.getctime)
         checkpoint = torch.load(model_path,
@@ -319,7 +322,9 @@ class ImageDescriptor():
         del checkpoint
 
     def load_state_dict(self, checkpoint):
-        """Loads the experiment from the input checkpoint."""
+        '''
+        Loads the experiment from the input checkpoint.
+        '''
         self.__encoder.load_state_dict(checkpoint['Net'][0])
         self.__decoder.load_state_dict(checkpoint['Net'][1])
         if self.__mode == 'train':
@@ -335,6 +340,10 @@ class ImageDescriptor():
                         state[k] = v.to(self.__device)
 
     def train(self):
+        '''
+        Train the network using backpropagation based 
+        on the optimizer and the training set.
+        '''
         total_step = len(self.__data_loader)
         start_epoch = self.epoch
         print("Start/Continue training from epoch {}".format(start_epoch))
@@ -391,6 +400,9 @@ class ImageDescriptor():
         self.__mode = mode
 
     def __load_image(self, image_path):
+        '''
+        Load image at `image_path` for evaluation.
+        '''
         image = Image.open(image_path)
         image = image.resize([224, 224], Image.LANCZOS)
 
@@ -403,6 +415,10 @@ class ImageDescriptor():
         return image
 
     def evaluate(self, image_path=None, plot=False):
+        '''
+        Evaluate the model by generating the caption for the 
+        corresponding image at `image_path`.
+        '''
         if self.__mode == 'train':
             raise ValueError('Please switch to eval mode.')
         if not image_path:
