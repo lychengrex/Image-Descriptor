@@ -8,7 +8,6 @@ from build_vocab import Vocabulary
 import torchvision.transforms as transforms
 from PIL import Image
 import matplotlib.pyplot as plt
-
 import torch
 import torch.nn as nn
 import torchvision.models as models
@@ -18,7 +17,9 @@ from torch.autograd import Variable
 
 class EncoderCNN(nn.Module):
     def __init__(self, embed_size, attention_mechanism=False):
-        """Load the pretrained ResNet-152 and replace top fc layer."""
+        '''
+        Load the pretrained ResNet-152 and replace top fc layer.
+        '''
         super(EncoderCNN, self).__init__()
         resnet = models.resnet152(pretrained=True)
         modules = list(resnet.children())[:-1]      # delete the last fc layer.
@@ -32,14 +33,10 @@ class EncoderCNN(nn.Module):
         self.attention_mechanism = attention_mechanism
 
     def forward(self, images):
-        """Extract feature vectors from input images."""
+        '''
+        Extract feature vectors from input images.
+        '''
         if self.attention_mechanism:
-            # features = self.resnet(images)
-            # features = Variable(features.data)
-            # features = features.view(features.size(0), -1)
-            # cnn_features = features
-            # features = self.bn(self.linear(features))
-            # return features, cnn_features
             with torch.no_grad():
                 features = self.resnet(images)
             features = features.data
@@ -56,8 +53,11 @@ class EncoderCNN(nn.Module):
 
 
 class DecoderRNN(nn.Module):
-    def __init__(self, embed_size, hidden_size, vocab_size, num_layers, max_seq_length=20, attention_mechanism=False):
-        """Set the hyper-parameters and build the layers."""
+    def __init__(self, embed_size, hidden_size, vocab_size,
+                 num_layers, max_seq_length=20, attention_mechanism=False):
+        '''
+        Set the hyper-parameters and build the layers.
+        '''
         super(DecoderRNN, self).__init__()
         self.embed = nn.Embedding(vocab_size, embed_size)
         self.lstm = nn.LSTM(embed_size, hidden_size,
@@ -72,7 +72,9 @@ class DecoderRNN(nn.Module):
         self.attention_mechanism = attention_mechanism
 
     def init_weights(self):
-        """Initialize weights."""
+        '''
+        Initialize weights.
+        '''
         self.embed.weight.data.uniform_(-0.1, 0.1)
         self.linear.weight.data.uniform_(-0.1, 0.1)
         self.linear.bias.data.fill_(0)
@@ -81,9 +83,10 @@ class DecoderRNN(nn.Module):
         self.attended.weight.data.uniform_(-0.1, 0.1)
         self.attended.bias.data.fill_(0)
 
-    # def forward(self, features, captions, lengths):
     def forward(self, features, captions, lengths, cnn_features=None):
-        """Decode image feature vectors and generates captions."""
+        '''
+        Decode image feature vectors and generates captions.
+        '''
         embeddings = self.embed(captions)
         embeddings = torch.cat((features.unsqueeze(1), embeddings), 1)
 
@@ -126,9 +129,10 @@ class DecoderRNN(nn.Module):
         hiddenStates = self.linear(hiddenStates)
         return hiddenStates
 
-    # def sample(self, features, states=None):
     def sample(self, features, cnn_features=None, states=None):
-        """Generate captions for given image features using greedy search."""
+        '''
+        Generate captions for given image features using greedy search.
+        '''
         sampled_ids = []
         inputs = features.unsqueeze(1)
 
@@ -148,7 +152,6 @@ class DecoderRNN(nn.Module):
             # sampled_ids: (batch_size, max_seq_length)
             sampled_ids = torch.stack(sampled_ids, 1)
             return sampled_ids
-
         batch_size = features.size(0)
 
         for i in range(self.max_seg_length):
@@ -186,17 +189,12 @@ class DecoderRNN(nn.Module):
 class Args():
     def __init__(self, log_step=10, save_step=1000, embed_size=256, hidden_size=512,
                  num_layers=1, num_epochs=5, batch_size=128, num_workers=2, learning_rate=0.001,
-                 model_path='models/', vocab_path='data/vocab.pkl', image_path='png/example.png', plot=False, image_dir='data/resized2014',
+                 mode='train', attention=False, model_path='models/', vocab_path='data/vocab.pkl',
+                 image_path='png/example.png', plot=False, image_dir='data/resized2014',
                  caption_path='data/annotations/captions_train2014.json'):
         '''
         For jupyter notebook
         '''
-        self.model_path = model_path
-        self.vocab_path = vocab_path
-        self.image_path = image_path
-        self.plot = plot
-        self.image_dir = image_dir
-        self.caption_path = caption_path
         self.log_step = log_step
         self.save_step = save_step
         self.embed_size = embed_size
@@ -206,23 +204,26 @@ class Args():
         self.batch_size = batch_size
         self.num_workers = num_workers
         self.learning_rate = learning_rate
+        self.mode = mode
+        self.attention = attention
+        self.model_path = model_path
+        self.vocab_path = vocab_path
+        self.image_path = image_path
+        self.plot = plot
+        self.image_dir = image_dir
+        self.caption_path = caption_path
 
 
 class ImageDescriptor():
-    def __init__(self, args=None, attention_mechanism=False, mode='train'):
-        assert(isinstance(mode, str))
-        assert(mode == 'train'or'eval')
-        self.__mode = mode
-        if not args:
-            args = Args()
+    def __init__(self, args):
+        assert(args.mode == 'train'or'eval')
         self.__args = args
+        self.__mode = args.mode
+        self.__attention_mechanism = args.attention
         self.__history = []
-        self.__attention_mechanism = attention_mechanism
 
         if not os.path.exists(args.model_path):
             os.makedirs(args.model_path)
-            if mode == 'eval':
-                raise FileNotFoundError('No checkpoint exists.')
 
         self.__config_path = os.path.join(args.model_path, "config.txt")
 
@@ -233,20 +234,20 @@ class ImageDescriptor():
         with open(args.vocab_path, 'rb') as f:
             self.__vocab = pickle.load(f)
 
-        if mode == 'eval':
+        if self.__mode == 'eval':
             self.__encoder = EncoderCNN(
-                args.embed_size, attention_mechanism=attention_mechanism).eval().to(self.__device)
+                args.embed_size, attention_mechanism=self.__attention_mechanism).eval().to(self.__device)
             self.__decoder = DecoderRNN(args.embed_size, args.hidden_size, len(
-                self.__vocab), args.num_layers, attention_mechanism=attention_mechanism).to(self.__device)
+                self.__vocab), args.num_layers, attention_mechanism=self.__attention_mechanism).to(self.__device)
             self.load()
         else:
             self.__data_loader = data_loader(args.image_dir, args.caption_path, self.__vocab, args.batch_size,
                                              shuffle=True, num_workers=args.num_workers)
             # Build the models
             self.__encoder = EncoderCNN(
-                args.embed_size, attention_mechanism=attention_mechanism).to(self.__device)
+                args.embed_size, attention_mechanism=self.__attention_mechanism).to(self.__device)
             self.__decoder = DecoderRNN(args.embed_size, args.hidden_size,
-                                        len(self.__vocab), args.num_layers, attention_mechanism=attention_mechanism).to(self.__device)
+                                        len(self.__vocab), args.num_layers, attention_mechanism=self.__attention_mechanism).to(self.__device)
 
             # Loss and optimizer
             self.__criterion = nn.CrossEntropyLoss()
@@ -314,8 +315,12 @@ class ImageDescriptor():
         '''
         Loads the experiment from the last checkpoint saved on disk.
         '''
-        model_path = max(
-            glob.iglob(os.path.join(self.__args.model_path, '*.ckpt')), key=os.path.getctime)
+        try:
+            model_path = max(
+                glob.iglob(os.path.join(self.__args.model_path, '*.ckpt')), key=os.path.getctime)
+        except:
+            raise FileNotFoundError(
+                'No checkpoint file in the model directory.')
         checkpoint = torch.load(model_path,
                                 map_location=self.__device)
         self.load_state_dict(checkpoint)
@@ -327,6 +332,7 @@ class ImageDescriptor():
         '''
         self.__encoder.load_state_dict(checkpoint['Net'][0])
         self.__decoder.load_state_dict(checkpoint['Net'][1])
+
         if self.__mode == 'train':
             self.__optimizer.load_state_dict(checkpoint['Optimizer'])
             self.__history = checkpoint['History']
@@ -358,8 +364,7 @@ class ImageDescriptor():
                     with torch.no_grad():
                         images = images.to(self.__device)
                     captions = captions.to(self.__device)
-                    # images = Variable(images.to(self.__device), volatile=True)
-                    # captions = Variable(captions.to(self.__device), volatile=False)
+
                 targets = pack_padded_sequence(
                     captions, lengths, batch_first=True)[0]
 

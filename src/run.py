@@ -5,8 +5,7 @@ from build_vocab import Vocabulary
 
 
 def main(args):
-    img_descriptor = ImageDescriptor(
-        args=args, attention_mechanism=True, mode=args.mode)
+    img_descriptor = ImageDescriptor(args)
     if args.mode == 'train':
         img_descriptor.train()
     elif args.mode == 'eval':
@@ -21,6 +20,8 @@ if __name__ == '__main__':
                         default=False, help='enable parser or not')
     parser.add_argument('--mode', type=str,
                         default='train', help='train or eval mode')
+    parser.add_argument('--attention', type=bool,
+                        default=False, help='use attention layers or not')
     parser.add_argument('--model_path', type=str,
                         default='models/', help='path for saving trained models')
     # parser.add_argument('--crop_size', type=int, default=224 , help='size for randomly cropping images')
