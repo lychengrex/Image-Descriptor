@@ -350,6 +350,9 @@ class ImageDescriptor():
         Train the network using backpropagation based 
         on the optimizer and the training set.
         '''
+        if self.__mode != 'train':
+            raise ValueError('Please switch to train mode.')
+
         total_step = len(self.__data_loader)
         start_epoch = self.epoch
         print("Start/Continue training from epoch {}".format(start_epoch))
@@ -424,7 +427,7 @@ class ImageDescriptor():
         Evaluate the model by generating the caption for the 
         corresponding image at `image_path`.
         '''
-        if self.__mode == 'train':
+        if self.__mode != 'eval':
             raise ValueError('Please switch to eval mode.')
         if not image_path:
             image_path = self.__args.image_path
