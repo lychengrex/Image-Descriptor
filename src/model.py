@@ -3,7 +3,7 @@ import numpy as np
 import time
 import glob
 import pickle
-from data import data_loader
+from data import CocoDataset, collate_fn
 from build_vocab import Vocabulary
 import torchvision.transforms as transforms
 from PIL import Image
@@ -234,6 +234,10 @@ class ImageDescriptor():
         with open(args.vocab_path, 'rb') as f:
             self.__vocab = pickle.load(f)
 
+        # coco dataset
+        self.__coco = CocoDataset(
+            args.image_dir, args.caption_path, self.__vocab)
+
         if self.__mode == 'eval':
             self.__encoder = EncoderCNN(
                 args.embed_size, attention_mechanism=self.__attention_mechanism).eval().to(self.__device)
@@ -241,8 +245,11 @@ class ImageDescriptor():
                 self.__vocab), args.num_layers, attention_mechanism=self.__attention_mechanism).to(self.__device)
             self.load()
         else:
-            self.__data_loader = data_loader(args.image_dir, args.caption_path, self.__vocab, args.batch_size,
-                                             shuffle=True, num_workers=args.num_workers)
+            self.__data_loader = torch.utils.data.DataLoader(dataset=self.__coco,
+                                                             batch_size=args.batch_size,
+                                                             shuffle=True,
+                                                             num_workers=args.num_workers,
+                                                             collate_fn=collate_fn)
             # Build the models
             self.__encoder = EncoderCNN(
                 args.embed_size, attention_mechanism=self.__attention_mechanism).to(self.__device)
