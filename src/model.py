@@ -189,9 +189,9 @@ class DecoderRNN(nn.Module):
 class Args():
     def __init__(self, log_step=10, save_step=1000, embed_size=256, hidden_size=512,
                  num_layers=1, num_epochs=5, batch_size=128, num_workers=2, learning_rate=0.001,
-                 mode='train', attention=False, model_path='models/', vocab_path='data/vocab.pkl',
-                 image_path='png/example.png', plot=False, image_dir='data/resized2014',
-                 caption_path='data/annotations/captions_train2014.json'):
+                 mode='train', attention=False, model_path='../models/', vocab_path='../data/vocab.pkl',
+                 image_path='../png/example.png', plot=False, image_dir='../data/resized2014',
+                 caption_path='../data/annotations/captions_train2014.json'):
         '''
         For jupyter notebook
         '''
