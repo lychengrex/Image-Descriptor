@@ -23,12 +23,12 @@ if __name__ == '__main__':
     parser.add_argument('--attention', type=bool,
                         default=False, help='use attention layers or not')
     parser.add_argument('--model_path', type=str,
-                        default='models/', help='path for saving trained models')
+                        default='../models/', help='path for saving trained models')
     # parser.add_argument('--crop_size', type=int, default=224 , help='size for randomly cropping images')
     parser.add_argument('--vocab_path', type=str,
                         default='../data/vocab.pkl', help='path for vocabulary wrapper')
     parser.add_argument('--image_path', type=str,
-                        default='png/example.png', help='image for evaluation')
+                        default='../png/example.png', help='image for evaluation')
     parser.add_argument('--plot', type=bool,
                         default=False, help='plot the evaluation image')
     parser.add_argument('--image_dir', type=str,
