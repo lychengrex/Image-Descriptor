@@ -13,6 +13,11 @@ import torch.nn as nn
 import torchvision.models as models
 from torch.nn.utils.rnn import pack_padded_sequence
 from torch.autograd import Variable
+from nltk.translate.bleu_score import sentence_bleu
+from nltk.translate.bleu_score import corpus_bleu
+from nltk.translate.bleu_score import SmoothingFunction
+from string import punctuation
+from random import randint
 
 
 class EncoderCNN(nn.Module):
@@ -189,8 +194,9 @@ class DecoderRNN(nn.Module):
 class Args():
     def __init__(self, log_step=10, save_step=1000, embed_size=256, hidden_size=512,
                  num_layers=1, num_epochs=5, batch_size=128, num_workers=2, learning_rate=0.001,
-                 mode='train', attention=False, model_path='../models/', vocab_path='../data/vocab.pkl',
-                 image_path='../png/example.png', plot=False, image_dir='../data/resized2014',
+                 mode='train', attention=False, caption=False, model_path='../models/',
+                 vocab_path='../data/vocab.pkl', image_path='../png/example.png',
+                 plot=False, image_dir='../data/resized2014',
                  caption_path='../data/annotations/captions_train2014.json'):
         '''
         For jupyter notebook
@@ -206,6 +212,7 @@ class Args():
         self.learning_rate = learning_rate
         self.mode = mode
         self.attention = attention
+        self.caption = caption
         self.model_path = model_path
         self.vocab_path = vocab_path
         self.image_path = image_path
@@ -302,7 +309,7 @@ class ImageDescriptor():
 
     def state_dict(self):
         '''
-        Returns the current state of the experiment.
+        Returns the current state of the model.
         '''
         return {'Net': (self.__encoder.state_dict(), self.__decoder.state_dict()),
                 'Optimizer': self.__optimizer.state_dict(),
@@ -310,7 +317,7 @@ class ImageDescriptor():
 
     def save(self):
         '''
-        Saves the experiment on disk, i.e, create/update the last checkpoint.
+        Saves the model on disk, i.e, create/update the last checkpoint.
         '''
         model_path = os.path.join(
             self.__args.model_path, 'epoch-{}.ckpt'.format(self.epoch))
@@ -320,7 +327,7 @@ class ImageDescriptor():
 
     def load(self):
         '''
-        Loads the experiment from the last checkpoint saved on disk.
+        Loads the model from the last checkpoint saved on disk.
         '''
         try:
             model_path = max(
@@ -335,7 +342,10 @@ class ImageDescriptor():
 
     def load_state_dict(self, checkpoint):
         '''
-        Loads the experiment from the input checkpoint.
+        Loads the model from the input checkpoint.
+
+        Args:
+            checkpoint: an object saved with torch.save() from a file.
         '''
         self.__encoder.load_state_dict(checkpoint['Net'][0])
         self.__decoder.load_state_dict(checkpoint['Net'][1])
@@ -354,7 +364,7 @@ class ImageDescriptor():
 
     def train(self):
         '''
-        Train the network using backpropagation based 
+        Train the network using backpropagation based
         on the optimizer and the training set.
         '''
         total_step = len(self.__data_loader)
@@ -406,6 +416,9 @@ class ImageDescriptor():
     def mode(self, mode=None):
         '''
         Get the current mode or change mode.
+
+        Args:
+            mode (str): 'train' or 'eval' mode
         '''
         if not mode:
             return self.__mode
@@ -414,6 +427,9 @@ class ImageDescriptor():
     def __load_image(self, image_path):
         '''
         Load image at `image_path` for evaluation.
+
+        Args:
+            image_path(str): file path of the image
         '''
         image = Image.open(image_path)
         image = image.resize([224, 224], Image.LANCZOS)
@@ -428,8 +444,14 @@ class ImageDescriptor():
 
     def evaluate(self, image_path=None, plot=False):
         '''
-        Evaluate the model by generating the caption for the 
+        Evaluate the model by generating the caption for the
         corresponding image at `image_path`.
+
+        Note: This function will not provide BLEU socre.
+
+        Args:
+            image_path (str): file path of the evaluation image
+            plot (bool): plot or not
         '''
         if self.__mode == 'train':
             raise ValueError('Please switch to eval mode.')
@@ -455,7 +477,7 @@ class ImageDescriptor():
             sampled_caption.append(word)
             if word == '<end>':
                 break
-        sentence = ' '.join(sampled_caption)
+        sentence = ' '.join(sampled_caption[1:-1])
 
         # Print out the image and the generated caption
         print(sentence)
@@ -463,3 +485,95 @@ class ImageDescriptor():
         if plot:
             image = Image.open(image_path)
             plt.imshow(np.asarray(image))
+
+    def coco_dataset(self, idx):
+        '''
+        Access iamge_id (which is part of the file name) 
+        and corresponding image caption of index `idx` in COCO dataset.
+
+        Note: For jupyter notebook
+
+        Args:
+            idx (int): index of COCO dataset
+
+        Returns:
+            (dict)
+        '''
+        return self.__coco.coco.anns[idx]
+
+    def bleu_socre(self, idx, plot=False, multiple=False):
+        '''
+        Evaluate the BLEU score for index `idx` in COCO dataset.
+
+        Note: For jupyter notebook
+        
+        Args:
+            idx (int): index
+            plot (bool): plot the image or not
+            multiple (bool): evaluate multiple index or not
+        '''
+        if self.__mode == 'train':
+            raise ValueError('Please switch to eval mode.')
+
+        if not multiple:
+            try:
+                # index in COCO dataset is not continuous
+                file_name = self.__coco.coco.anns[idx]['image_id']
+            except:
+                raise FileNotFoundError('Invalid index')
+        else:
+            try:
+                # index in COCO dataset is not continuous
+                file_name = self.__coco.coco.anns[idx]['image_id']
+            except:
+                return None
+
+        file_name = str(file_name)
+        if len(file_name) != 6:
+            for _ in range(6 - len(file_name)):
+                file_name = '0' + file_name
+
+        try:
+            image_path = f'../data/val2014/COCO_val2014_000000{file_name}.jpg'
+            img = self.__load_image(image_path).to(self.__device)
+        except:
+            image_path = f'../data/train2014/COCO_train2014_000000{file_name}.jpg'
+            img = self.__load_image(image_path).to(self.__device)
+
+        # generate an caption
+        if not self.__attention_mechanism:
+            feature = self.__encoder(img)
+            sampled_ids = self.__decoder.sample(feature)
+            sampled_ids = sampled_ids[0].cpu().numpy()
+        else:
+            feature, cnn_features = self.__encoder(img)
+            sampled_ids = self.__decoder.sample(feature, cnn_features)
+            sampled_ids = sampled_ids.cpu().data.numpy()
+
+        # Convert word_ids to words
+        sampled_caption = []
+        for word_id in sampled_ids:
+            word = self.__vocab.idx2word[word_id]
+            sampled_caption.append(word)
+            if word == '<end>':
+                break
+
+        # strip punctuations and spacing
+        sampled_list = [c for c in sampled_caption[1:-1]
+                        if c not in punctuation]
+
+        coco_list = self.__coco.coco.anns[idx]['caption'].split()
+        score = sentence_bleu(coco_list, sampled_list,
+                              smoothing_function=SmoothingFunction().method4)
+
+        # Print out the generated caption
+        print(f'Sampled caption:\n{sampled_list}')
+        print(f'COCO caption:\n{coco_list}')
+        print(f'BLEU score: {score}\n')
+
+        if plot:
+            plt.figure()
+            image = Image.open(image_path)
+            plt.imshow(np.asarray(image))
+            plt.title(f'score: {score}')
+            plt.xlabel(f'file: {image_path}')
