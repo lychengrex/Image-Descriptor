@@ -46,6 +46,7 @@ chmod +x download_dataset.sh
 4. Preprocessing
 
 ```bash
+cd src
 python build_vocab.py  
 python resize.py
 ```
