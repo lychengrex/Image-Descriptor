@@ -65,8 +65,8 @@ nohup python run.py --mode='train' --attention=True > log.txt &
 
 ```bash
 # no attention layer
-python run.py --mode='eval' --image_path='png/example.png'
+python run.py --mode='eval' --image_path='../png/example.png'
 
 # with attention layer
-python run.py --mode='eval' --attention=True --image_path='png/example.png'
+python run.py --mode='eval' --attention=True --image_path='../png/example.png'
 ```
