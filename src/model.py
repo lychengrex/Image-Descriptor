@@ -17,7 +17,6 @@ from nltk.translate.bleu_score import sentence_bleu
 from nltk.translate.bleu_score import corpus_bleu
 from nltk.translate.bleu_score import SmoothingFunction
 from string import punctuation
-from random import randint
 
 
 class EncoderCNN(nn.Module):
