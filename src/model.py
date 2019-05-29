@@ -223,7 +223,7 @@ class Args():
 
 class ImageDescriptor():
     def __init__(self, args):
-        assert(args.mode == 'train'or'eval')
+        assert(args.mode == 'train' or 'eval')
         self.__args = args
         self.__mode = args.mode
         self.__attention_mechanism = args.attention
@@ -238,12 +238,18 @@ class ImageDescriptor():
         self.__device = torch.device(
             'cuda' if torch.cuda.is_available() else 'cpu')
 
+        # training set vocab
         with open(args.vocab_path, 'rb') as f:
             self.__vocab = pickle.load(f)
+        # validation set vocab
+        with open(args.vocab_path.replace('train', 'val'), 'rb') as f:
+            self.__vocab_val = pickle.load(f)
 
         # coco dataset
-        self.__coco = CocoDataset(
+        self.__coco_train = CocoDataset(
             args.image_dir, args.caption_path, self.__vocab)
+        self.__coco_val = CocoDataset(
+            args.image_dir, args.caption_path.replace('train', 'val'), self.__vocab_val)
 
         if self.__mode == 'eval':
             self.__encoder = EncoderCNN(
@@ -252,7 +258,7 @@ class ImageDescriptor():
                 self.__vocab), args.num_layers, attention_mechanism=self.__attention_mechanism).to(self.__device)
             self.load()
         else:
-            self.__data_loader = torch.utils.data.DataLoader(dataset=self.__coco,
+            self.__data_loader = torch.utils.data.DataLoader(dataset=self.__coco_train,
                                                              batch_size=args.batch_size,
                                                              shuffle=True,
                                                              num_workers=args.num_workers,
@@ -281,8 +287,8 @@ class ImageDescriptor():
                             "Cannot create this experiment: "
                             "I found a checkpoint conflicting with the current setting.")
                 self.load()
-            # else:
-            #     self.save()
+            else:
+                self.save()
 
     def setting(self):
         '''
@@ -486,7 +492,7 @@ class ImageDescriptor():
             image = Image.open(image_path)
             plt.imshow(np.asarray(image))
 
-    def coco_dataset(self, idx):
+    def coco_dataset(self, idx, ds='val'):
         '''
         Access iamge_id (which is part of the file name) 
         and corresponding image caption of index `idx` in COCO dataset.
@@ -499,46 +505,54 @@ class ImageDescriptor():
         Returns:
             (dict)
         '''
-        return self.__coco.coco.anns[idx]
+        assert(ds == 'train' or 'val')
 
-    def bleu_socre(self, idx, plot=False, multiple=False):
+        if ds == 'train':
+            ann_id = self.__coco_train.ids[idx]
+            return self.__coco_train.coco.anns[ann_id]
+        else:
+            ann_id = self.__coco_val.ids[idx]
+            return self.__coco_val.coco.anns[ann_id]
+
+    def bleu_socre(self, idx, ds='val', plot=False, multiple=False):
         '''
         Evaluate the BLEU score for index `idx` in COCO dataset.
 
         Note: For jupyter notebook
-        
+
         Args:
             idx (int): index
+            ds (str): training or validation dataset
             plot (bool): plot the image or not
             multiple (bool): evaluate multiple index or not
         '''
+        assert(ds == 'train' or 'val')
         if self.__mode == 'train':
             raise ValueError('Please switch to eval mode.')
-
-        if not multiple:
-            try:
-                # index in COCO dataset is not continuous
-                file_name = self.__coco.coco.anns[idx]['image_id']
-            except:
-                raise FileNotFoundError('Invalid index')
-        else:
-            try:
-                # index in COCO dataset is not continuous
-                file_name = self.__coco.coco.anns[idx]['image_id']
-            except:
-                return None
-
-        file_name = str(file_name)
-        if len(file_name) != 6:
-            for _ in range(6 - len(file_name)):
-                file_name = '0' + file_name
-
         try:
-            image_path = f'../data/val2014/COCO_val2014_000000{file_name}.jpg'
-            img = self.__load_image(image_path).to(self.__device)
+            if ds == 'train':
+                ann_id = self.__coco_train.ids[idx]
+                coco_ann = self.__coco_train.coco.anns[ann_id]
+            else:
+                ann_id = self.__coco_val.ids[idx]
+                coco_ann = self.__coco_val.coco.anns[ann_id]
         except:
-            image_path = f'../data/train2014/COCO_train2014_000000{file_name}.jpg'
-            img = self.__load_image(image_path).to(self.__device)
+            raise IndexError('Invalid index')
+
+        image_id = coco_ann['image_id']
+
+        image_id = str(image_id)
+        if len(image_id) != 6:
+            for _ in range(6 - len(image_id)):
+                image_id = '0' + image_id
+
+        image_path = f'{self.__args.image_dir}/COCO_train2014_000000{image_id}.jpg'
+        if ds == 'val':
+            image_path = image_path.replace('train', 'val')
+
+        coco_list = coco_ann['caption'].split()
+
+        img = self.__load_image(image_path).to(self.__device)
 
         # generate an caption
         if not self.__attention_mechanism:
@@ -562,7 +576,6 @@ class ImageDescriptor():
         sampled_list = [c for c in sampled_caption[1:-1]
                         if c not in punctuation]
 
-        coco_list = self.__coco.coco.anns[idx]['caption'].split()
         score = sentence_bleu(coco_list, sampled_list,
                               smoothing_function=SmoothingFunction().method4)
 
