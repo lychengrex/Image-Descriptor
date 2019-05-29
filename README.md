@@ -47,8 +47,13 @@ chmod +x download_dataset.sh
 
 ```bash
 cd src
+# training set
 python build_vocab.py  
 python resize.py
+
+# validation set
+python build_vocab.py --caption_path='../data/annotations/captions_val2014.json' --vocab_path='../data/vocab_val.pkl'
+python resize.py --image_dir='../data/val2014/'
 ```
 
 5. Train the model in the background save log file  
