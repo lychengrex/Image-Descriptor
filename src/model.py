@@ -71,7 +71,7 @@ class DecoderRNN(nn.Module):
         if attention_mechanism:
             self.attention = nn.Linear(hidden_size+embed_size, 2048)
             self.attended = nn.Linear(2048+embed_size, embed_size)
-            self.softmax = nn.Softmax()
+            self.softmax = nn.Softmax(dim=1)
             self.init_weights()
         self.attention_mechanism = attention_mechanism
 
