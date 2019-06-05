@@ -2,6 +2,10 @@
 
 Image captioning
 
+* Group Members: [Che-Ming Chia](https://github.com/shoachia), [Shang-Wei Hung](https://github.com/shangweihung), [Tsun-Hsu Lee](https://github.com/thlee-0810)
+
+The original code for image captioning is from: [pytorch-tutorial/image-captioning](https://github.com/yunjey/pytorch-tutorial/tree/master/tutorials/03-advanced/image_captioning). We tweak it and add extra functions.
+
 ## Dataset
 
 * [COCO](http://cocodataset.org/): COCO is a large-scale object detection, segmentation, and captioning dataset.  
