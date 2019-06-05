@@ -1,29 +1,49 @@
 import argparse
 import pickle
-from model import ImageDescriptor
+from model import DecoderRNN, ResNet, VGG
+from utils import ImageDescriptor
 from build_vocab import Vocabulary
 
 
-def main(args):
-    img_descriptor = ImageDescriptor(args)
+def run(args):
+    if args.encoder == 'resnet':
+        encoder = ResNet(args.embed_size, ver=args.encoder_ver,
+                         attention_mechanism=args.attention)
+    elif args.encoder == 'vgg':
+        encoder = VGG(args.embed_size, ver=args.encoder_ver,
+                      attention_mechanism=args.attention)
+    else:
+        raise NameError('Not supported pretrained network')
+
+    img_descriptor = ImageDescriptor(
+        args, encoder=encoder)
     if args.mode == 'train':
+        # train the network
         img_descriptor.train()
-    elif args.mode == 'eval':
-        img_descriptor.evaluate(args.image_path, plot=args.plot)
+    elif args.mode == 'test':
+        # get image caption for one image
+        img_descriptor.test(args.image_path, plot=args.plot)
+    elif args.mode == 'val':
+        # run validation set for one epoch and get the average loss
+        img_descriptor.evaluate()
     else:
         raise ValueError('Invalid mode.')
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--enable', type=bool,
-                        default=False, help='enable parser or not')
+    parser.add_argument('--encoder', type=str,
+                        default='resnet', help='pretrained network for encoder')
+    parser.add_argument('--encoder_ver', type=int,
+                        default='101', help='number of layers of the pretrained network')
     parser.add_argument('--mode', type=str,
-                        default='train', help='train or eval mode')
+                        default='train', help='train, test or val mode')
     parser.add_argument('--attention', type=bool,
                         default=False, help='use attention layers or not')
-    parser.add_argument('--model_path', type=str,
+    parser.add_argument('--model_dir', type=str,
                         default='../models/', help='path for saving trained models')
+    parser.add_argument('--checkpoint', type=str,
+                        default=None, help='path to the checkpoints (.ckpt)')
     # parser.add_argument('--crop_size', type=int, default=224 , help='size for randomly cropping images')
     parser.add_argument('--vocab_path', type=str,
                         default='../data/vocab.pkl', help='path for vocabulary wrapper')
@@ -39,6 +59,8 @@ if __name__ == '__main__':
                         help='step size for prining log info')
     parser.add_argument('--save_step', type=int, default=1000,
                         help='step size for saving trained models')
+    parser.add_argument('--validate_when_training', type=bool, default=False,
+                        help='perform validation during training or not')
 
     # Model parameters
     parser.add_argument('--embed_size', type=int, default=256,
@@ -54,4 +76,4 @@ if __name__ == '__main__':
     parser.add_argument('--learning_rate', type=float, default=0.001)
     args = parser.parse_args()
     print(args)
-    main(args)
+    run(args)

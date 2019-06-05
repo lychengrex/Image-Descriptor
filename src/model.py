@@ -1,66 +1,143 @@
-import os
-import numpy as np
-import time
-import glob
-import pickle
-from data import CocoDataset, collate_fn
-from build_vocab import Vocabulary
-import torchvision.transforms as transforms
-from PIL import Image
-import matplotlib.pyplot as plt
 import torch
 import torch.nn as nn
 import torchvision.models as models
 from torch.nn.utils.rnn import pack_padded_sequence
-from torch.autograd import Variable
-from nltk.translate.bleu_score import sentence_bleu
-from nltk.translate.bleu_score import corpus_bleu
-from nltk.translate.bleu_score import SmoothingFunction
-from string import punctuation
 
 
-class EncoderCNN(nn.Module):
-    def __init__(self, embed_size, attention_mechanism=False):
+class ResNet(nn.Module):
+    def __init__(self, embed_size, ver=101, attention_mechanism=False):
         '''
-        Load the pretrained ResNet-152 and replace top fc layer.
+        Load the pretrained ResNet and replace top fc layer.
+
+        Args:
+            embed_size (int): dimension of word embedding vectors
+            ver (int): version of the pretrained network
+            attention_mechanism (bool): use attention layers in decoder network or not
         '''
-        super(EncoderCNN, self).__init__()
-        resnet = models.resnet152(pretrained=True)
-        modules = list(resnet.children())[:-1]      # delete the last fc layer.
+        super(ResNet, self).__init__()
+
+        if ver == 152:
+            resnet = models.resnet152(pretrained=True)
+        elif ver == 101:
+            resnet = models.resnet101(pretrained=True)
+        elif ver == 50:
+            resnet = models.resnet50(pretrained=True)
+        else:
+            raise ModuleNotFoundError()
+
+        # delete the last fc layer.
+        modules = list(resnet.children())[:-1]
         self.resnet = nn.Sequential(*modules)
         self.linear = nn.Linear(resnet.fc.in_features, embed_size)
         self.bn = nn.BatchNorm1d(embed_size, momentum=0.01)
         if attention_mechanism:
-            """Initialize the weights."""
+            # Initialize the weights
             self.linear.weight.data.normal_(0.0, 0.02)
             self.linear.bias.data.fill_(0)
+            self.attention_size = resnet.fc.in_features
+        self.attention_mechanism = attention_mechanism
+
+    def forward(self, images):
+        '''
+        Extract feature vectors from input images.
+
+        Args:
+            images (tensor)
+        '''
+        with torch.no_grad():
+            features = self.resnet(images)
+        if self.attention_mechanism:
+            # features = features.data
+            features = features.reshape(features.size(0), -1)
+            cnn_features = features
+            features = self.bn(self.linear(features))
+            return features, cnn_features
+        else:
+            features = features.reshape(features.size(0), -1)
+            features = self.bn(self.linear(features))
+            return features
+
+
+class VGG(nn.Module):
+    def __init__(self, embed_size, ver=19, attention_mechanism=False):
+        '''
+        Load the pretrained VGG and replace fc layer.
+
+        Args:
+            embed_size (int): dimension of word embedding vectors
+            ver (int): version of the pretrained network
+            attention_mechanism (bool): use attention layers in decoder network or not
+        '''
+        super(VGG, self).__init__()
+        if ver == 19:
+            vgg = models.vgg19_bn(pretrained=True)
+        else:
+            raise ModuleNotFoundError()
+
+        self.features = vgg.features
+        self.classifier = vgg.classifier
+        # change input node and output node for output FC # 4096
+        # self.classifier[3] = nn.Linear(vgg.classifier[3].in_features, 2048)
+        self.classifier[6] = nn.Linear(
+            vgg.classifier[6].in_features, embed_size)
+        self.linear = self.classifier[6]
+        self.bn = nn.BatchNorm1d(embed_size, momentum=0.01)
+
+        if attention_mechanism:
+            """Initialize the weights."""
+            self.classifier[3].weight.data.normal_(0.0, 0.02)
+            self.classifier[3].bias.data.fill_(0)
+            self.classifier[6].weight.data.normal_(0.0, 0.02)
+            self.classifier[6].bias.data.fill_(0)
+            self.attention_size = vgg.classifier[6].in_features
+
         self.attention_mechanism = attention_mechanism
 
     def forward(self, images):
         '''
         Extract feature vectors from input images.
         '''
-        if self.attention_mechanism:
-            with torch.no_grad():
-                features = self.resnet(images)
-            features = features.data
-            features = features.reshape(features.size(0), -1)
-            cnn_features = features
-            features = self.bn(self.linear(features))
-            return features, cnn_features
-        else:
-            with torch.no_grad():
-                features = self.resnet(images)
-            features = features.reshape(features.size(0), -1)
-            features = self.bn(self.linear(features))
+        # features extraction
+        with torch.no_grad():
+            features = self.features(images)
+
+        # flattern
+        features = features.view(features.size(0), -1)
+
+        # for no attention layers in RNN
+        if not self.attention_mechanism:
+            features = self.classifier(features)
+            features = self.bn(features)
             return features
+
+        # for using attention layers in RNN
+        # for i in range(4):
+        #     features = self.classifier[i](features)
+        # # cnn_features = features
+        # for i in range(4, len(self.classifier)):
+        #     features = self.classifier[i](features)
+        features = self.classifier[0](features)
+        cnn_features = features
+        for i in range(1, len(self.classifier)):
+            features = self.classifier[i](features)
+        features = self.bn(features)
+        return features, cnn_features
 
 
 class DecoderRNN(nn.Module):
-    def __init__(self, embed_size, hidden_size, vocab_size,
+    def __init__(self, embed_size, hidden_size, vocab_size, attention_size,
                  num_layers, max_seq_length=20, attention_mechanism=False):
         '''
         Set the hyper-parameters and build the layers.
+
+        Args:
+            embed_size (int): dimension of word embedding vectors
+            hidden_size (int): dimension of lstm hidden states
+            vocab_size (int): number of vocabulary in the caption dictionary
+            attention_size (int): number of features before the output of CNN
+            num_layers (int): number of layers in lstm
+            max_seq_length (int)
+            attention_mechanism (bool): use attention layer or not
         '''
         super(DecoderRNN, self).__init__()
         self.embed = nn.Embedding(vocab_size, embed_size)
@@ -69,8 +146,8 @@ class DecoderRNN(nn.Module):
         self.linear = nn.Linear(hidden_size, vocab_size)
         self.max_seg_length = max_seq_length
         if attention_mechanism:
-            self.attention = nn.Linear(hidden_size+embed_size, 2048)
-            self.attended = nn.Linear(2048+embed_size, embed_size)
+            self.attention = nn.Linear(hidden_size+embed_size, attention_size)
+            self.attended = nn.Linear(attention_size+embed_size, embed_size)
             self.softmax = nn.Softmax(dim=1)
             self.init_weights()
         self.attention_mechanism = attention_mechanism
@@ -90,6 +167,12 @@ class DecoderRNN(nn.Module):
     def forward(self, features, captions, lengths, cnn_features=None):
         '''
         Decode image feature vectors and generates captions.
+
+        Args:
+            features
+            captions
+            lengths
+            cnn_features
         '''
         embeddings = self.embed(captions)
         embeddings = torch.cat((features.unsqueeze(1), embeddings), 1)
@@ -136,6 +219,11 @@ class DecoderRNN(nn.Module):
     def sample(self, features, cnn_features=None, states=None):
         '''
         Generate captions for given image features using greedy search.
+
+        Args:
+            features
+            cnn_features
+            states
         '''
         sampled_ids = []
         inputs = features.unsqueeze(1)
@@ -188,404 +276,3 @@ class DecoderRNN(nn.Module):
         # (batch_size, 20)
         sampled_ids = torch.cat(sampled_ids, 0)
         return sampled_ids.squeeze()
-
-
-class Args():
-    def __init__(self, log_step=10, save_step=1000, embed_size=256, hidden_size=512,
-                 num_layers=1, num_epochs=5, batch_size=128, num_workers=2, learning_rate=0.001,
-                 mode='train', attention=False, caption=False, model_path='../models/',
-                 vocab_path='../data/vocab.pkl', image_path='../png/example.png',
-                 plot=False, image_dir='../data/resized2014',
-                 caption_path='../data/annotations/captions_train2014.json'):
-        '''
-        For jupyter notebook
-        '''
-        self.log_step = log_step
-        self.save_step = save_step
-        self.embed_size = embed_size
-        self.hidden_size = hidden_size
-        self.num_layers = num_layers
-        self.num_epochs = num_epochs
-        self.batch_size = batch_size
-        self.num_workers = num_workers
-        self.learning_rate = learning_rate
-        self.mode = mode
-        self.attention = attention
-        self.caption = caption
-        self.model_path = model_path
-        self.vocab_path = vocab_path
-        self.image_path = image_path
-        self.plot = plot
-        self.image_dir = image_dir
-        self.caption_path = caption_path
-
-
-class ImageDescriptor():
-    def __init__(self, args):
-        assert(args.mode == 'train' or 'eval')
-        self.__args = args
-        self.__mode = args.mode
-        self.__attention_mechanism = args.attention
-        self.__history = []
-
-        if not os.path.exists(args.model_path):
-            os.makedirs(args.model_path)
-
-        self.__config_path = os.path.join(args.model_path, "config.txt")
-
-        # Device configuration
-        self.__device = torch.device(
-            'cuda' if torch.cuda.is_available() else 'cpu')
-
-        # training set vocab
-        with open(args.vocab_path, 'rb') as f:
-            self.__vocab = pickle.load(f)
-        # validation set vocab
-        with open(args.vocab_path.replace('train', 'val'), 'rb') as f:
-            self.__vocab_val = pickle.load(f)
-
-        # coco dataset
-        self.__coco_train = CocoDataset(
-            args.image_dir, args.caption_path, self.__vocab)
-        self.__coco_val = CocoDataset(
-            args.image_dir, args.caption_path.replace('train', 'val'), self.__vocab_val)
-
-        if self.__mode == 'eval':
-            self.__encoder = EncoderCNN(
-                args.embed_size, attention_mechanism=self.__attention_mechanism).eval().to(self.__device)
-            self.__decoder = DecoderRNN(args.embed_size, args.hidden_size, len(
-                self.__vocab), args.num_layers, attention_mechanism=self.__attention_mechanism).to(self.__device)
-            self.load()
-        else:
-            self.__data_loader = torch.utils.data.DataLoader(dataset=self.__coco_train,
-                                                             batch_size=args.batch_size,
-                                                             shuffle=True,
-                                                             num_workers=args.num_workers,
-                                                             collate_fn=collate_fn)
-            # Build the models
-            self.__encoder = EncoderCNN(
-                args.embed_size, attention_mechanism=self.__attention_mechanism).to(self.__device)
-            self.__decoder = DecoderRNN(args.embed_size, args.hidden_size,
-                                        len(self.__vocab), args.num_layers, attention_mechanism=self.__attention_mechanism).to(self.__device)
-
-            # Loss and optimizer
-            self.__criterion = nn.CrossEntropyLoss()
-            self.__params = list(self.__decoder.parameters(
-            )) + list(self.__encoder.linear.parameters()) + list(self.__encoder.bn.parameters())
-            self.__optimizer = torch.optim.Adam(
-                self.__params, lr=args.learning_rate)
-
-            # Load checkpoint and check compatibility
-            if os.path.isfile(self.__config_path):
-                with open(self.__config_path, 'r') as f:
-                    content = f.read()[:-1]
-                    if content != repr(self):
-                        print(f'f.read():\n{content}')
-                        print(f'repr(self):\n{repr(self)}')
-                        raise ValueError(
-                            "Cannot create this experiment: "
-                            "I found a checkpoint conflicting with the current setting.")
-                self.load()
-            else:
-                self.save()
-
-    def setting(self):
-        '''
-        Return the setting of the experiment.
-        '''
-        return {'Net': (self.__encoder, self.__decoder),
-                'Optimizer': self.__optimizer,
-                'BatchSize': self.__args.batch_size}
-
-    @property
-    def epoch(self):
-        return len(self.__history)
-
-    def __repr__(self):
-        '''
-        Pretty printer showing the setting of the experiment. This is what
-        is displayed when doing `print(experiment). This is also what is
-        saved in the `config.txt file.
-        '''
-        string = ''
-        for key, val in self.setting().items():
-            string += '{}({})\n'.format(key, val)
-        return string
-
-    def state_dict(self):
-        '''
-        Returns the current state of the model.
-        '''
-        return {'Net': (self.__encoder.state_dict(), self.__decoder.state_dict()),
-                'Optimizer': self.__optimizer.state_dict(),
-                'History': self.__history}
-
-    def save(self):
-        '''
-        Saves the model on disk, i.e, create/update the last checkpoint.
-        '''
-        model_path = os.path.join(
-            self.__args.model_path, 'epoch-{}.ckpt'.format(self.epoch))
-        torch.save(self.state_dict(), model_path)
-        with open(self.__config_path, 'w') as f:
-            print(self, file=f)
-
-    def load(self):
-        '''
-        Loads the model from the last checkpoint saved on disk.
-        '''
-        try:
-            model_path = max(
-                glob.iglob(os.path.join(self.__args.model_path, '*.ckpt')), key=os.path.getctime)
-        except:
-            raise FileNotFoundError(
-                'No checkpoint file in the model directory.')
-        checkpoint = torch.load(model_path,
-                                map_location=self.__device)
-        self.load_state_dict(checkpoint)
-        del checkpoint
-
-    def load_state_dict(self, checkpoint):
-        '''
-        Loads the model from the input checkpoint.
-
-        Args:
-            checkpoint: an object saved with torch.save() from a file.
-        '''
-        self.__encoder.load_state_dict(checkpoint['Net'][0])
-        self.__decoder.load_state_dict(checkpoint['Net'][1])
-
-        if self.__mode == 'train':
-            self.__optimizer.load_state_dict(checkpoint['Optimizer'])
-            self.__history = checkpoint['History']
-
-            # The following loops are used to fix a bug that was
-            # discussed here: https://github.com/pytorch/pytorch/issues/2830
-            # (it is supposed to be fixed in recent PyTorch version)
-            for state in self.__optimizer.state.values():
-                for k, v in state.items():
-                    if isinstance(v, torch.Tensor):
-                        state[k] = v.to(self.__device)
-
-    def train(self):
-        '''
-        Train the network using backpropagation based
-        on the optimizer and the training set.
-        '''
-        total_step = len(self.__data_loader)
-        start_epoch = self.epoch
-        print("Start/Continue training from epoch {}".format(start_epoch))
-        for epoch in range(start_epoch, self.__args.num_epochs):
-            t_start = time.time()
-            for i, (images, captions, lengths) in enumerate(self.__data_loader):
-                # Set mini-batch dataset
-                if not self.__attention_mechanism:
-                    images = images.to(self.__device)
-                    captions = captions.to(self.__device)
-                else:
-                    with torch.no_grad():
-                        images = images.to(self.__device)
-                    captions = captions.to(self.__device)
-
-                targets = pack_padded_sequence(
-                    captions, lengths, batch_first=True)[0]
-
-                # Forward, backward and optimize
-                if not self.__attention_mechanism:
-                    features = self.__encoder(images)
-                    outputs = self.__decoder(features, captions, lengths)
-                    self.__decoder.zero_grad()
-                    self.__encoder.zero_grad()
-                else:
-                    self.__encoder.zero_grad()
-                    self.__decoder.zero_grad()
-                    features, cnn_features = self.__encoder(images)
-                    outputs = self.__decoder(
-                        features, captions, lengths, cnn_features=cnn_features)
-                loss = self.__criterion(outputs, targets)
-
-                loss.backward()
-                self.__optimizer.step()
-
-                # Print log info
-                if i % self.__args.log_step == 0:
-                    print('Epoch [{}/{}], Step [{}/{}], Loss: {:.4f}, Perplexity: {:5.4f}'
-                          .format(epoch+1, self.__args.num_epochs, i, total_step, loss.item(), np.exp(loss.item())))
-
-            self.__history.append(loss)
-            # Save the model checkpoints
-            print("Epoch {} (Time: {:.2f}s)".format(
-                self.epoch, time.time() - t_start))
-            self.save()
-
-    def mode(self, mode=None):
-        '''
-        Get the current mode or change mode.
-
-        Args:
-            mode (str): 'train' or 'eval' mode
-        '''
-        if not mode:
-            return self.__mode
-        self.__mode = mode
-
-    def __load_image(self, image_path):
-        '''
-        Load image at `image_path` for evaluation.
-
-        Args:
-            image_path(str): file path of the image
-        '''
-        image = Image.open(image_path)
-        image = image.resize([224, 224], Image.LANCZOS)
-
-        transform = transforms.Compose([
-            transforms.ToTensor(),
-            transforms.Normalize((0.485, 0.456, 0.406),
-                                 (0.229, 0.224, 0.225))])
-        image = transform(image).unsqueeze(0)
-
-        return image
-
-    def evaluate(self, image_path=None, plot=False):
-        '''
-        Evaluate the model by generating the caption for the
-        corresponding image at `image_path`.
-
-        Note: This function will not provide BLEU socre.
-
-        Args:
-            image_path (str): file path of the evaluation image
-            plot (bool): plot or not
-        '''
-        if self.__mode == 'train':
-            raise ValueError('Please switch to eval mode.')
-        if not image_path:
-            image_path = self.__args.image_path
-
-        img = self.__load_image(image_path).to(self.__device)
-
-        # generate an caption
-        if not self.__attention_mechanism:
-            feature = self.__encoder(img)
-            sampled_ids = self.__decoder.sample(feature)
-            sampled_ids = sampled_ids[0].cpu().numpy()
-        else:
-            feature, cnn_features = self.__encoder(img)
-            sampled_ids = self.__decoder.sample(feature, cnn_features)
-            sampled_ids = sampled_ids.cpu().data.numpy()
-
-        # Convert word_ids to words
-        sampled_caption = []
-        for word_id in sampled_ids:
-            word = self.__vocab.idx2word[word_id]
-            sampled_caption.append(word)
-            if word == '<end>':
-                break
-        sentence = ' '.join(sampled_caption[1:-1])
-
-        # Print out the image and the generated caption
-        print(sentence)
-
-        if plot:
-            image = Image.open(image_path)
-            plt.imshow(np.asarray(image))
-
-    def coco_dataset(self, idx, ds='val'):
-        '''
-        Access iamge_id (which is part of the file name) 
-        and corresponding image caption of index `idx` in COCO dataset.
-
-        Note: For jupyter notebook
-
-        Args:
-            idx (int): index of COCO dataset
-
-        Returns:
-            (dict)
-        '''
-        assert(ds == 'train' or 'val')
-
-        if ds == 'train':
-            ann_id = self.__coco_train.ids[idx]
-            return self.__coco_train.coco.anns[ann_id]
-        else:
-            ann_id = self.__coco_val.ids[idx]
-            return self.__coco_val.coco.anns[ann_id]
-
-    def bleu_socre(self, idx, ds='val', plot=False, multiple=False):
-        '''
-        Evaluate the BLEU score for index `idx` in COCO dataset.
-
-        Note: For jupyter notebook
-
-        Args:
-            idx (int): index
-            ds (str): training or validation dataset
-            plot (bool): plot the image or not
-            multiple (bool): evaluate multiple index or not
-        '''
-        assert(ds == 'train' or 'val')
-        if self.__mode == 'train':
-            raise ValueError('Please switch to eval mode.')
-        try:
-            if ds == 'train':
-                ann_id = self.__coco_train.ids[idx]
-                coco_ann = self.__coco_train.coco.anns[ann_id]
-            else:
-                ann_id = self.__coco_val.ids[idx]
-                coco_ann = self.__coco_val.coco.anns[ann_id]
-        except:
-            raise IndexError('Invalid index')
-
-        image_id = coco_ann['image_id']
-
-        image_id = str(image_id)
-        if len(image_id) != 6:
-            for _ in range(6 - len(image_id)):
-                image_id = '0' + image_id
-
-        image_path = f'{self.__args.image_dir}/COCO_train2014_000000{image_id}.jpg'
-        if ds == 'val':
-            image_path = image_path.replace('train', 'val')
-
-        coco_list = coco_ann['caption'].split()
-
-        img = self.__load_image(image_path).to(self.__device)
-
-        # generate an caption
-        if not self.__attention_mechanism:
-            feature = self.__encoder(img)
-            sampled_ids = self.__decoder.sample(feature)
-            sampled_ids = sampled_ids[0].cpu().numpy()
-        else:
-            feature, cnn_features = self.__encoder(img)
-            sampled_ids = self.__decoder.sample(feature, cnn_features)
-            sampled_ids = sampled_ids.cpu().data.numpy()
-
-        # Convert word_ids to words
-        sampled_caption = []
-        for word_id in sampled_ids:
-            word = self.__vocab.idx2word[word_id]
-            sampled_caption.append(word)
-            if word == '<end>':
-                break
-
-        # strip punctuations and spacing
-        sampled_list = [c for c in sampled_caption[1:-1]
-                        if c not in punctuation]
-
-        score = sentence_bleu(coco_list, sampled_list,
-                              smoothing_function=SmoothingFunction().method4)
-
-        # Print out the generated caption
-        print(f'Sampled caption:\n{sampled_list}')
-        print(f'COCO caption:\n{coco_list}')
-        print(f'BLEU score: {score}\n')
-
-        if plot:
-            plt.figure()
-            image = Image.open(image_path)
-            plt.imshow(np.asarray(image))
-            plt.title(f'score: {score}')
-            plt.xlabel(f'file: {image_path}')
