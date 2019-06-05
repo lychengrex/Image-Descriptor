@@ -98,7 +98,7 @@ class StatsManager(object):
 
 class ImageDescriptor():
     def __init__(self, args, encoder):
-        assert(args.mode == 'train' or 'eval')
+        assert(args.mode == 'train' or 'val' or 'test')
         self.__args = args
         self.__mode = args.mode
         self.__attention_mechanism = args.attention
@@ -143,7 +143,7 @@ class ImageDescriptor():
         # Build the models
         self.__encoder = encoder.to(self.__device)
         self.__decoder = DecoderRNN(args.embed_size, args.hidden_size,
-                                    len(self.__vocab), self.__encoder.attention_size, args.num_layers, attention_mechanism=self.__attention_mechanism).to(self.__device)
+                                    len(self.__vocab), args.num_layers, attention_mechanism=self.__attention_mechanism).to(self.__device)
 
         # Loss and optimizer
         self.__criterion = nn.CrossEntropyLoss()
@@ -278,9 +278,8 @@ class ImageDescriptor():
                     images = images.to(self.__device)
                     captions = captions.to(self.__device)
                 else:
-                    # with torch.no_grad():
-                    #     images = images.to(self.__device)
-                    images = images.to(self.__device)
+                    with torch.no_grad():
+                        images = images.to(self.__device)
                     captions = captions.to(self.__device)
 
                 targets = pack_padded_sequence(
@@ -334,19 +333,12 @@ class ImageDescriptor():
         total_step = len(self.__val_loader)
         with torch.no_grad():
             for i, (images, captions, lengths) in enumerate(self.__val_loader):
-                # Set mini-batch dataset
-                if not self.__attention_mechanism:
-                    images = images.to(self.__device)
-                    captions = captions.to(self.__device)
-                else:
-                    with torch.no_grad():
-                        images = images.to(self.__device)
-                    captions = captions.to(self.__device)
-
+                images = images.to(self.__device)
+                captions = captions.to(self.__device)
                 targets = pack_padded_sequence(
                     captions, lengths, batch_first=True)[0]
 
-                # Forward, backward and optimize
+                # Forward
                 if not self.__attention_mechanism:
                     features = self.__encoder(images)
                     outputs = self.__decoder(features, captions, lengths)

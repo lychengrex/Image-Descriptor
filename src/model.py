@@ -34,7 +34,6 @@ class ResNet(nn.Module):
             # Initialize the weights
             self.linear.weight.data.normal_(0.0, 0.02)
             self.linear.bias.data.fill_(0)
-            self.attention_size = resnet.fc.in_features
         self.attention_mechanism = attention_mechanism
 
     def forward(self, images):
@@ -47,7 +46,7 @@ class ResNet(nn.Module):
         with torch.no_grad():
             features = self.resnet(images)
         if self.attention_mechanism:
-            # features = features.data
+            features = features.data
             features = features.reshape(features.size(0), -1)
             cnn_features = features
             features = self.bn(self.linear(features))
@@ -76,20 +75,18 @@ class VGG(nn.Module):
 
         self.features = vgg.features
         self.classifier = vgg.classifier
-        # change input node and output node for output FC # 4096
-        # self.classifier[3] = nn.Linear(vgg.classifier[3].in_features, 2048)
-        self.classifier[6] = nn.Linear(
-            vgg.classifier[6].in_features, embed_size)
+        # change the number of output features (4096 -> 2048)
+        self.classifier[3] = nn.Linear(vgg.classifier[3].in_features, 2048)
+        self.classifier[6] = nn.Linear(2048, embed_size)
         self.linear = self.classifier[6]
         self.bn = nn.BatchNorm1d(embed_size, momentum=0.01)
 
         if attention_mechanism:
-            """Initialize the weights."""
+            # Initialize the weights
             self.classifier[3].weight.data.normal_(0.0, 0.02)
             self.classifier[3].bias.data.fill_(0)
             self.classifier[6].weight.data.normal_(0.0, 0.02)
             self.classifier[6].bias.data.fill_(0)
-            self.attention_size = vgg.classifier[6].in_features
 
         self.attention_mechanism = attention_mechanism
 
@@ -111,21 +108,20 @@ class VGG(nn.Module):
             return features
 
         # for using attention layers in RNN
-        # for i in range(4):
-        #     features = self.classifier[i](features)
-        # # cnn_features = features
-        # for i in range(4, len(self.classifier)):
-        #     features = self.classifier[i](features)
-        features = self.classifier[0](features)
-        cnn_features = features
-        for i in range(1, len(self.classifier)):
+        for i in range(4):
             features = self.classifier[i](features)
+
+        cnn_features = features
+
+        for i in range(4, len(self.classifier)):
+            features = self.classifier[i](features)
+
         features = self.bn(features)
         return features, cnn_features
 
 
 class DecoderRNN(nn.Module):
-    def __init__(self, embed_size, hidden_size, vocab_size, attention_size,
+    def __init__(self, embed_size, hidden_size, vocab_size,
                  num_layers, max_seq_length=20, attention_mechanism=False):
         '''
         Set the hyper-parameters and build the layers.
@@ -134,7 +130,6 @@ class DecoderRNN(nn.Module):
             embed_size (int): dimension of word embedding vectors
             hidden_size (int): dimension of lstm hidden states
             vocab_size (int): number of vocabulary in the caption dictionary
-            attention_size (int): number of features before the output of CNN
             num_layers (int): number of layers in lstm
             max_seq_length (int)
             attention_mechanism (bool): use attention layer or not
@@ -146,8 +141,8 @@ class DecoderRNN(nn.Module):
         self.linear = nn.Linear(hidden_size, vocab_size)
         self.max_seg_length = max_seq_length
         if attention_mechanism:
-            self.attention = nn.Linear(hidden_size+embed_size, attention_size)
-            self.attended = nn.Linear(attention_size+embed_size, embed_size)
+            self.attention = nn.Linear(hidden_size+embed_size, 2048)
+            self.attended = nn.Linear(2048+embed_size, embed_size)
             self.softmax = nn.Softmax(dim=1)
             self.init_weights()
         self.attention_mechanism = attention_mechanism
