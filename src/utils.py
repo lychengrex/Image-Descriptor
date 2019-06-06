@@ -158,9 +158,9 @@ class ImageDescriptor():
 
         # coco dataset
         self.__coco_train = CocoDataset(
-            args.image_dir, args.caption_path, self.__vocab)
+            args.image_dir, args.caption_path, self.__vocab, args.crop_size)
         self.__coco_val = CocoDataset(
-            args.image_dir, args.caption_path.replace('train', 'val'), self.__vocab_val)
+            args.image_dir, args.caption_path.replace('train', 'val'), self.__vocab_val, args.crop_size)
 
         # data loader
         self.__train_loader = torch.utils.data.DataLoader(dataset=self.__coco_train,
@@ -256,18 +256,21 @@ class ImageDescriptor():
             file_name (str): path to the checkpoint file
         '''
         if not file_name:
+            # find the latest .ckpt file
             try:
                 file_name = max(
                     glob.iglob(os.path.join(self.__args.model_dir, '*.ckpt')), key=os.path.getctime)
             except:
                 raise FileNotFoundError(
                     'No checkpoint file in the model directory.')
+        else:
+            file_name = os.path.join(self.__args.model_dir, file_name)
 
         try:
             checkpoint = torch.load(file_name, map_location=self.__device)
         except:
             raise FileNotFoundError(
-                'Please check --checkpoint, the path to the file')
+                'Please check --checkpoint, the name of the file')
         self.load_state_dict(checkpoint)
         del checkpoint
 
@@ -359,10 +362,14 @@ class ImageDescriptor():
             self.save()
 
     def evaluate(self, print_info=False):
-        """Evaluates the experiment, i.e., forward propagates the validation set
+        '''
+        Evaluates the experiment, i.e., forward propagates the validation set
         through the network and returns the statistics computed by the stats
         manager.
-        """
+
+        Args:
+            print_info (bool): print the results of loss and perplexity
+        '''
         self.__stats_manager.init()
         self.__encoder.eval()
         self.__decoder.eval()

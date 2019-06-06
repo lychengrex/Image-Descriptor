@@ -18,7 +18,7 @@ from pycocotools.coco import COCO
 class CocoDataset(data.Dataset):
     """COCO Custom Dataset compatible with torch.utils.data.DataLoader."""
 
-    def __init__(self, root, json, vocab):
+    def __init__(self, root, json, vocab, crop_size):
         """Set the path for images, captions and vocabulary wrapper.
 
         Args:
@@ -33,7 +33,7 @@ class CocoDataset(data.Dataset):
         # Load vocabulary wrapper
         self.vocab = vocab
         self.transform = transforms.Compose([
-            transforms.RandomCrop(224),
+            transforms.RandomCrop(crop_size),
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
             transforms.Normalize((0.485, 0.456, 0.406),

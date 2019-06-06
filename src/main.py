@@ -17,6 +17,7 @@ def run(args):
 
     img_descriptor = ImageDescriptor(
         args, encoder=encoder)
+    print(img_descriptor)
     if args.mode == 'train':
         # train the network
         img_descriptor.train()
@@ -24,8 +25,8 @@ def run(args):
         # get image caption for one image
         img_descriptor.test(args.image_path, plot=args.plot)
     elif args.mode == 'val':
-        # run validation set for one epoch and get the average loss
-        img_descriptor.evaluate()
+        # only run validation set for a specific epoch and get the average loss and perplexity
+        img_descriptor.evaluate(print_info=True)
     else:
         raise ValueError('Invalid mode.')
 
@@ -43,8 +44,8 @@ if __name__ == '__main__':
     parser.add_argument('--model_dir', type=str,
                         default='../models/', help='path for saving trained models')
     parser.add_argument('--checkpoint', type=str,
-                        default=None, help='path to the checkpoints (.ckpt)')
-    # parser.add_argument('--crop_size', type=int, default=224 , help='size for randomly cropping images')
+                        default=None, help='file name of the specific checkpoint(.ckpt)')
+    parser.add_argument('--crop_size', type=int, default=224 , help='size for randomly cropping images')
     parser.add_argument('--vocab_path', type=str,
                         default='../data/vocab.pkl', help='path for vocabulary wrapper')
     parser.add_argument('--image_path', type=str,
