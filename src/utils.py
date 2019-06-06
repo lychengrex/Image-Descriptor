@@ -189,12 +189,14 @@ class ImageDescriptor():
         if os.path.isfile(self.__config_path):
             with open(self.__config_path, 'r') as f:
                 content = f.read()[:-1]
-                if content != repr(self):
-                    print(f'f.read():\n{content}')
-                    print(f'repr(self):\n{repr(self)}')
-                    raise ValueError(
-                        "Cannot create this experiment: "
-                        "I found a checkpoint conflicting with the current setting.")
+            if content != repr(self):
+                # save the error info
+                with open('config.err', 'w') as f:
+                    print(f'f.read():\n{content}', file=f)
+                    print(f'repr(self):\n{repr(self)}', file=f)
+                raise ValueError(
+                    "Cannot create this experiment: "
+                    "I found a checkpoint conflicting with the current setting.")
             self.load(file_name=args.checkpoint)
         else:
             self.save()
@@ -446,38 +448,42 @@ class ImageDescriptor():
             image_path (str): file path of the evaluation image
             plot (bool): plot or not
         '''
-        if self.__mode == 'train':
-            raise ValueError('Please switch to eval mode.')
-        if not image_path:
-            image_path = self.__args.image_path
+        self.__encoder.eval()
+        self.__decoder.eval()
 
-        img = self.__load_image(image_path).to(self.__device)
+        with torch.no_grad():
+            if not image_path:
+                image_path = self.__args.image_path
 
-        # generate an caption
-        if not self.__attention_mechanism:
-            feature = self.__encoder(img)
-            sampled_ids = self.__decoder.sample(feature)
-            sampled_ids = sampled_ids[0].cpu().numpy()
-        else:
-            feature, cnn_features = self.__encoder(img)
-            sampled_ids = self.__decoder.sample(feature, cnn_features)
-            sampled_ids = sampled_ids.cpu().data.numpy()
+            img = self.__load_image(image_path).to(self.__device)
 
-        # Convert word_ids to words
-        sampled_caption = []
-        for word_id in sampled_ids:
-            word = self.__vocab.idx2word[word_id]
-            sampled_caption.append(word)
-            if word == '<end>':
-                break
-        sentence = ' '.join(sampled_caption[1:-1])
+            # generate an caption
+            if not self.__attention_mechanism:
+                feature = self.__encoder(img)
+                sampled_ids = self.__decoder.sample(feature)
+                sampled_ids = sampled_ids[0].cpu().numpy()
+            else:
+                feature, cnn_features = self.__encoder(img)
+                sampled_ids = self.__decoder.sample(feature, cnn_features)
+                sampled_ids = sampled_ids.cpu().data.numpy()
 
-        # Print out the image and the generated caption
-        print(sentence)
+            # Convert word_ids to words
+            sampled_caption = []
+            for word_id in sampled_ids:
+                word = self.__vocab.idx2word[word_id]
+                sampled_caption.append(word)
+                if word == '<end>':
+                    break
+            sentence = ' '.join(sampled_caption[1:-1])
 
-        if plot:
-            image = Image.open(image_path)
-            plt.imshow(np.asarray(image))
+            # Print out the image and the generated caption
+            print(sentence)
+
+            if plot:
+                image = Image.open(image_path)
+                plt.imshow(np.asarray(image))
+        self.__encoder.train()
+        self.__decoder.train()
 
     def coco_dataset(self, idx, ds='val'):
         '''
