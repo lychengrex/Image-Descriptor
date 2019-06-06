@@ -19,11 +19,11 @@ from string import punctuation
 
 
 class Args():
-    def __init__(self, log_step=10, save_step=1000, embed_size=256, hidden_size=512,
+    def __init__(self, log_step=10, save_step=1000, embed_size=256, hidden_size=512, crop_size=224,
                  num_layers=1, num_epochs=5, batch_size=128, num_workers=2, learning_rate=0.001,
-                 mode='train', attention=False, caption=False, model_dir='../models/',
-                 vocab_path='../data/vocab.pkl', image_path='../png/example.png',
-                 plot=False, image_dir='../data/resized2014',
+                 encoder='resnet', encoder_ver=101, mode='train', attention=False, caption=False, model_dir='../models/',
+                 checkpoint=None, vocab_path='../data/vocab.pkl', image_path='../png/example.png',
+                 plot=False, image_dir='../data/resized2014', validate_when_training=False, 
                  caption_path='../data/annotations/captions_train2014.json'):
         '''
         For jupyter notebook
@@ -32,19 +32,24 @@ class Args():
         self.save_step = save_step
         self.embed_size = embed_size
         self.hidden_size = hidden_size
+        self.crop_size = crop_size
         self.num_layers = num_layers
         self.num_epochs = num_epochs
         self.batch_size = batch_size
         self.num_workers = num_workers
         self.learning_rate = learning_rate
+        self.encoder = encoder
+        self.encoder_ver = encoder_ver
         self.mode = mode
         self.attention = attention
         self.caption = caption
         self.model_dir = model_dir
+        self.checkpoint = checkpoint
         self.vocab_path = vocab_path
         self.image_path = image_path
         self.plot = plot
         self.image_dir = image_dir
+        self.validate_when_training = validate_when_training
         self.caption_path = caption_path
 
 
