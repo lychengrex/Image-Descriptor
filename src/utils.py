@@ -519,66 +519,71 @@ class ImageDescriptor():
             plot (bool): plot the image or not
         '''
         assert(ds == 'train' or 'val')
-        if self.__mode == 'train':
-            raise ValueError('Please switch to eval mode.')
-        try:
-            if ds == 'train':
-                ann_id = self.__coco_train.ids[idx]
-                coco_ann = self.__coco_train.coco.anns[ann_id]
+        self.__encoder.eval()
+        self.__decoder.eval()
+
+        with torch.no_grad():
+            try:
+                if ds == 'train':
+                    ann_id = self.__coco_train.ids[idx]
+                    coco_ann = self.__coco_train.coco.anns[ann_id]
+                else:
+                    ann_id = self.__coco_val.ids[idx]
+                    coco_ann = self.__coco_val.coco.anns[ann_id]
+            except:
+                raise IndexError('Invalid index')
+
+            image_id = coco_ann['image_id']
+
+            image_id = str(image_id)
+            if len(image_id) != 6:
+                for _ in range(6 - len(image_id)):
+                    image_id = '0' + image_id
+
+            image_path = f'{self.__args.image_dir}/COCO_train2014_000000{image_id}.jpg'
+            if ds == 'val':
+                image_path = image_path.replace('train', 'val')
+
+            coco_list = coco_ann['caption'].split()
+
+            img = self.__load_image(image_path).to(self.__device)
+
+            # generate an caption
+            if not self.__attention_mechanism:
+                feature = self.__encoder(img)
+                sampled_ids = self.__decoder.sample(feature)
+                sampled_ids = sampled_ids[0].cpu().numpy()
             else:
-                ann_id = self.__coco_val.ids[idx]
-                coco_ann = self.__coco_val.coco.anns[ann_id]
-        except:
-            raise IndexError('Invalid index')
+                feature, cnn_features = self.__encoder(img)
+                sampled_ids = self.__decoder.sample(feature, cnn_features)
+                sampled_ids = sampled_ids.cpu().data.numpy()
 
-        image_id = coco_ann['image_id']
+            # Convert word_ids to words
+            sampled_caption = []
+            for word_id in sampled_ids:
+                word = self.__vocab.idx2word[word_id]
+                sampled_caption.append(word)
+                if word == '<end>':
+                    break
 
-        image_id = str(image_id)
-        if len(image_id) != 6:
-            for _ in range(6 - len(image_id)):
-                image_id = '0' + image_id
+            # strip punctuations and spacing
+            sampled_list = [c for c in sampled_caption[1:-1]
+                            if c not in punctuation]
 
-        image_path = f'{self.__args.image_dir}/COCO_train2014_000000{image_id}.jpg'
-        if ds == 'val':
-            image_path = image_path.replace('train', 'val')
+            score = sentence_bleu(coco_list, sampled_list,
+                                smoothing_function=SmoothingFunction().method4)
 
-        coco_list = coco_ann['caption'].split()
+            if plot:
+                plt.figure()
+                image = Image.open(image_path)
+                plt.imshow(np.asarray(image))
+                plt.title(f'score: {score}')
+                plt.xlabel(f'file: {image_path}')
 
-        img = self.__load_image(image_path).to(self.__device)
-
-        # generate an caption
-        if not self.__attention_mechanism:
-            feature = self.__encoder(img)
-            sampled_ids = self.__decoder.sample(feature)
-            sampled_ids = sampled_ids[0].cpu().numpy()
-        else:
-            feature, cnn_features = self.__encoder(img)
-            sampled_ids = self.__decoder.sample(feature, cnn_features)
-            sampled_ids = sampled_ids.cpu().data.numpy()
-
-        # Convert word_ids to words
-        sampled_caption = []
-        for word_id in sampled_ids:
-            word = self.__vocab.idx2word[word_id]
-            sampled_caption.append(word)
-            if word == '<end>':
-                break
-
-        # strip punctuations and spacing
-        sampled_list = [c for c in sampled_caption[1:-1]
-                        if c not in punctuation]
-
-        score = sentence_bleu(coco_list, sampled_list,
-                              smoothing_function=SmoothingFunction().method4)
-
-        if plot:
-            plt.figure()
-            image = Image.open(image_path)
-            plt.imshow(np.asarray(image))
-            plt.title(f'score: {score}')
-            plt.xlabel(f'file: {image_path}')
-
-        # Print out the generated caption
-        print(f'Sampled caption:\n{sampled_list}')
-        print(f'COCO caption:\n{coco_list}')
-        print(f'BLEU score: {score:.6f}\n')
+            # Print out the generated caption
+            print(f'Sampled caption:\n{sampled_list}')
+            print(f'COCO caption:\n{coco_list}')
+            print(f'BLEU score: {score:.6f}\n')
+        
+        self.__encoder.train()
+        self.__decoder.train()
