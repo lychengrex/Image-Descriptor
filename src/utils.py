@@ -501,7 +501,7 @@ class ImageDescriptor():
             ann_id = self.__coco_val.ids[idx]
             return self.__coco_val.coco.anns[ann_id]
 
-    def bleu_socre(self, idx, ds='val', plot=False):
+    def bleu_score(self, idx, ds='val', plot=False):
         '''
         Evaluate the BLEU score for index `idx` in COCO dataset.
 
