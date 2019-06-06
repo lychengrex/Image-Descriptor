@@ -62,20 +62,38 @@ python resize.py --image_dir='../data/val2014/'
 
 5. Train the model in the background save log file  
 
+It takes around 30 minutes.
+
 ```bash  
 # no attention layer
-nohup python run.py --mode='train' > log.txt &  
+nohup python main.py --mode='train' > log.txt &  
 
 # with attention layer
-nohup python run.py --mode='train' --attention=True > log.txt &  
+nohup python main.py --mode='train' --attention=True > log.txt &  
 ```
 
-6. Evaluate the model  
+**How to specify a model**:
+
+Take `resnet152` for example. Assign `--encoder=resnet` and `--encoder_ver=152`.
+
+6. Evaluate the model
+
+To get a caption for a specific image.
 
 ```bash
 # no attention layer
-python run.py --mode='eval' --image_path='../png/example.png'
+python main.py --mode=test --encoder=resnet --encoder_ver=101 --image_path=../png/example.png
 
 # with attention layer
-python run.py --mode='eval' --attention=True --image_path='../png/example.png'
+python main.py --mode=test --encoder=resnet --encoder_ver=101 --attention=True --image_path=../png/example.png
+```
+
+To get the loss of validation set at specific epoch. (run in the background). It takes around 20 minutes.
+
+```bash
+# no attention layer
+nohup python main.py --mode=val --encoder=resnet --encoder_ver=101 --model_dir=../models --checkpoint=epoch-3.ckpt > val_loss.txt &
+
+# with attention layer
+nohup python main.py --mode=val --encoder=resnet --encoder_ver=101 --attention=True --model_dir=../models --checkpoint=epoch-3.ckpt > val_loss_att.txt &
 ```
