@@ -96,13 +96,46 @@ class StatsManager(object):
         return self.running_loss / self.number_update
 
 
+class ImageDescriptorStatsManager(StatsManager):
+    def __init__(self):
+        super(ImageDescriptorStatsManager, self).__init__()
+
+    def init(self):
+        """Initialize/Reset all the statistics"""
+        super(ImageDescriptorStatsManager, self).init()
+        self.running_perplexity = 0
+
+    def accumulate(self, loss, perplexity, x=None, y=None, d=None):
+        """Accumulate statistics
+
+        Though the arguments x, y, d are not used in this implementation, they
+        are meant to be used by any subclasses. For instance they can be used
+        to compute and track top-5 accuracy when training a classifier.
+
+        Arguments:
+            loss (float): the loss obtained during the last update.
+            x (Tensor): the input of the network during the last update.
+            y (Tensor): the prediction of by the network during the last update.
+            d (Tensor): the desired output for the last update.
+        """
+        # compute loss from StatsManager
+        super(ImageDescriptorStatsManager, self).accumulate(loss)
+        # compute perplexity here (assume d is perplexity)
+        self.running_perplexity += perplexity
+
+    def summarize(self):
+        loss = super(ImageDescriptorStatsManager, self).summarize()
+        perplexity = self.running_perplexity / self.number_update
+        return {'loss': loss, 'perplexity': perplexity}
+
+
 class ImageDescriptor():
     def __init__(self, args, encoder):
         assert(args.mode == 'train' or 'val' or 'test')
         self.__args = args
         self.__mode = args.mode
         self.__attention_mechanism = args.attention
-        self.__stats_manager = StatsManager()
+        self.__stats_manager = ImageDescriptorStatsManager()
         self.__validate_when_training = args.validate_when_training
         self.__history = []
 
@@ -302,7 +335,8 @@ class ImageDescriptor():
                 loss.backward()
                 self.__optimizer.step()
                 with torch.no_grad():
-                    self.__stats_manager.accumulate(loss.item())
+                    self.__stats_manager.accumulate(
+                        loss=loss.item(), perplexity=np.exp(loss.item()))
 
                 # Print log info each iteration
                 if i % self.__args.log_step == 0:
@@ -311,18 +345,20 @@ class ImageDescriptor():
 
             if not self.__validate_when_training:
                 self.__history.append(self.__stats_manager.summarize())
-                print("Epoch {} | Time: {:.2f}s | Training Loss: {:.6f}".format(
-                    self.epoch, time.time() - t_start, self.__history[-1][0]['loss']))
+                print("Epoch {} | Time: {:.2f}s\nTraining Loss: {:.6f} | Training Perplexity: {:.6f}".format(
+                    self.epoch, time.time() - t_start, self.__history[-1]['loss'], self.__history[-1]['perplexity']))
             else:
                 self.__history.append(
                     (self.__stats_manager.summarize(), self.evaluate()))
-                print("Epoch {} | Time: {:.2f}s | Training Loss: {:.6f} | Evaluation Loss: {:.6f}".format(
-                    self.epoch, time.time() - t_start, self.__history[-1][0]['loss'], self.__history[-1][1]['loss']))
+                print("Epoch {} | Time: {:.2f}s\nTraining Loss: {:.6f} | Training Perplexity: {:.6f}\nEvaluation Loss: {:.6f} | Evaluation Perplexity: {:.6f}".format(
+                    self.epoch, time.time() - t_start,
+                    self.__history[-1][0]['loss'], self.__history[-1][0]['perplexity'],
+                    self.__history[-1][1]['loss'], self.__history[-1][1]['perplexity']))
 
             # Save the model checkpoints
             self.save()
 
-    def evaluate(self):
+    def evaluate(self, print_info=False):
         """Evaluates the experiment, i.e., forward propagates the validation set
         through the network and returns the statistics computed by the stats
         manager.
@@ -347,16 +383,21 @@ class ImageDescriptor():
                     outputs = self.__decoder(
                         features, captions, lengths, cnn_features=cnn_features)
                 loss = self.__criterion(outputs, targets)
-                self.__stats_manager.accumulate(loss.item())
+                self.__stats_manager.accumulate(
+                    loss=loss.item(), perplexity=np.exp(loss.item()))
                 if i % self.__args.log_step == 0:
                     print('[Validation] Step: {}/{} | Loss: {:.4f} | Perplexity: {:5.4f}'
                           .format(i, total_step, loss.item(), np.exp(loss.item())))
 
-        avg_loss = self.__stats_manager.summarize()
-        print(f'Average validation loss for this epoch is {avg_loss:.6f}')
+        summarize = self.__stats_manager.summarize()
+        if print_info:
+            print(
+                f'[Validation] Average loss for this epoch is {summarize["loss"]:.6f}')
+            print(
+                f'[Validation] Average perplexity for this epoch is {summarize["perplexity"]:.6f}\n')
         self.__encoder.train()
         self.__decoder.train()
-        return avg_loss
+        return summarize
 
     def mode(self, mode=None):
         '''
