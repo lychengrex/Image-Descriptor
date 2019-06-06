@@ -45,7 +45,8 @@ if __name__ == '__main__':
                         default='../models/', help='path for saving trained models')
     parser.add_argument('--checkpoint', type=str,
                         default=None, help='file name of the specific checkpoint(.ckpt)')
-    parser.add_argument('--crop_size', type=int, default=224 , help='size for randomly cropping images')
+    parser.add_argument('--crop_size', type=int, default=224,
+                        help='size for randomly cropping images')
     parser.add_argument('--vocab_path', type=str,
                         default='../data/vocab.pkl', help='path for vocabulary wrapper')
     parser.add_argument('--image_path', type=str,
