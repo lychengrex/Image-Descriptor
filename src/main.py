@@ -5,7 +5,7 @@ from utils import ImageDescriptor
 from build_vocab import Vocabulary
 
 
-def run(args):
+def get_encoder(args):
     if args.encoder == 'resnet':
         encoder = ResNet(args.embed_size, ver=args.encoder_ver,
                          attention_mechanism=args.attention)
@@ -14,10 +14,16 @@ def run(args):
                       attention_mechanism=args.attention)
     else:
         raise NameError('Not supported pretrained network')
+    return encoder
 
-    img_descriptor = ImageDescriptor(
-        args, encoder=encoder)
+
+def run(args):
+    encoder = get_encoder(args)
+
+    img_descriptor = ImageDescriptor(args, encoder=encoder)
+
     print(img_descriptor)
+
     if args.mode == 'train':
         # train the network
         img_descriptor.train()
