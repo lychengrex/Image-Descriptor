@@ -271,6 +271,7 @@ class ImageDescriptor():
             try:
                 file_name = max(
                     glob.iglob(os.path.join(self.__args.model_dir, '*.ckpt')), key=os.path.getctime)
+                print(f'Load from {file_name}.')
             except:
                 raise FileNotFoundError(
                     'No checkpoint file in the model directory.')
@@ -279,6 +280,7 @@ class ImageDescriptor():
 
         try:
             checkpoint = torch.load(file_name, map_location=self.__device)
+            print(f'Load from {file_name}.')
         except:
             raise FileNotFoundError(
                 'Please check --checkpoint, the name of the file')
