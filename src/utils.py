@@ -23,7 +23,7 @@ class Args():
                  num_layers=1, num_epochs=5, batch_size=128, num_workers=2, learning_rate=0.001,
                  encoder='resnet', encoder_ver=101, mode='train', attention=False, caption=False, model_dir='../models/',
                  checkpoint=None, vocab_path='../data/vocab.pkl', image_path='../png/example.png',
-                 plot=False, image_dir='../data/resized2014', validate_when_training=False, 
+                 plot=False, image_dir='../data/resized2014', validate_when_training=False,
                  caption_path='../data/annotations/captions_train2014.json'):
         '''
         For jupyter notebook
@@ -147,7 +147,8 @@ class ImageDescriptor():
         if not os.path.exists(args.model_dir):
             os.makedirs(args.model_dir)
 
-        self.__config_path = os.path.join(args.model_dir, "config.txt")
+        self.__config_path = os.path.join(
+            args.model_dir, f'config-{args.encoder}{args.encoder_ver}.txt')
 
         # Device configuration
         self.__device = torch.device(
@@ -576,7 +577,7 @@ class ImageDescriptor():
                             if c not in punctuation]
 
             score = sentence_bleu(coco_list, sampled_list,
-                                smoothing_function=SmoothingFunction().method4)
+                                  smoothing_function=SmoothingFunction().method4)
 
             if plot:
                 plt.figure()
@@ -589,6 +590,6 @@ class ImageDescriptor():
             print(f'Sampled caption:\n{sampled_list}')
             print(f'COCO caption:\n{coco_list}')
             print(f'BLEU score: {score:.6f}\n')
-        
+
         self.__encoder.train()
         self.__decoder.train()
