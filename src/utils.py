@@ -496,7 +496,7 @@ class ImageDescriptor():
         self.__encoder.train()
         self.__decoder.train()
 
-    def coco_dataset(self, idx, ds='val'):
+    def coco_image(self, idx, ds='val'):
         '''
         Access iamge_id (which is part of the file name) 
         and corresponding image caption of index `idx` in COCO dataset.
@@ -517,6 +517,17 @@ class ImageDescriptor():
         else:
             ann_id = self.__coco_val.ids[idx]
             return self.__coco_val.coco.anns[ann_id]
+
+    @property
+    def len_of_train_set(self):
+        '''
+        Number of training 
+        '''
+        return len(self.__coco_train)
+
+    @property
+    def len_of_val_set(self):
+        return len(self.__coco_val)
 
     def bleu_score(self, idx, ds='val', plot=False, show_caption=False):
         '''
