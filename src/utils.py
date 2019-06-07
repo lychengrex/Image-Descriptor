@@ -147,8 +147,9 @@ class ImageDescriptor():
         if not os.path.exists(args.model_dir):
             os.makedirs(args.model_dir)
 
-        self.__config_path = os.path.join(
-            args.model_dir, f'config-{args.encoder}{args.encoder_ver}.txt')
+        # self.__config_path = os.path.join(
+        #     args.model_dir, f'config-{args.encoder}{args.encoder_ver}.txt')
+        self.__config_path = os.path.join(args.model_dir, 'config.txt')
 
         # Device configuration
         self.__device = torch.device(
