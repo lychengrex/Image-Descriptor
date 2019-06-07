@@ -285,7 +285,6 @@ class ImageDescriptor():
             raise FileNotFoundError(
                 'Please check --checkpoint, the name of the file')
 
-        print(f'Load from {file_name}.')
         self.load_state_dict(checkpoint)
         del checkpoint
 
@@ -433,14 +432,13 @@ class ImageDescriptor():
             return self.__mode
         self.__mode = mode
 
-    def __load_image(self, image_path):
+    def __load_image(self, image):
         '''
         Load image at `image_path` for evaluation.
 
         Args:
-            image_path(str): file path of the image
+            image (PIL Image): image
         '''
-        image = Image.open(image_path)
         image = image.resize([224, 224], Image.LANCZOS)
 
         transform = transforms.Compose([
@@ -469,33 +467,39 @@ class ImageDescriptor():
             if not image_path:
                 image_path = self.__args.image_path
 
-            img = self.__load_image(image_path).to(self.__device)
+            image = Image.open(image_path)
 
-            # generate an caption
-            if not self.__attention_mechanism:
-                feature = self.__encoder(img)
-                sampled_ids = self.__decoder.sample(feature)
-                sampled_ids = sampled_ids[0].cpu().numpy()
+            # only process with RGB image
+            if np.array(image).ndim == 3:
+                img = self.__load_image(image).to(self.__device)
+
+                # generate an caption
+                if not self.__attention_mechanism:
+                    feature = self.__encoder(img)
+                    sampled_ids = self.__decoder.sample(feature)
+                    sampled_ids = sampled_ids[0].cpu().numpy()
+                else:
+                    feature, cnn_features = self.__encoder(img)
+                    sampled_ids = self.__decoder.sample(feature, cnn_features)
+                    sampled_ids = sampled_ids.cpu().data.numpy()
+
+                # Convert word_ids to words
+                sampled_caption = []
+                for word_id in sampled_ids:
+                    word = self.__vocab.idx2word[word_id]
+                    sampled_caption.append(word)
+                    if word == '<end>':
+                        break
+                sentence = ' '.join(sampled_caption[1:-1])
+
+                # Print out the image and the generated caption
+                print(sentence)
+
+                if plot:
+                    image = Image.open(image_path)
+                    plt.imshow(np.asarray(image))
             else:
-                feature, cnn_features = self.__encoder(img)
-                sampled_ids = self.__decoder.sample(feature, cnn_features)
-                sampled_ids = sampled_ids.cpu().data.numpy()
-
-            # Convert word_ids to words
-            sampled_caption = []
-            for word_id in sampled_ids:
-                word = self.__vocab.idx2word[word_id]
-                sampled_caption.append(word)
-                if word == '<end>':
-                    break
-            sentence = ' '.join(sampled_caption[1:-1])
-
-            # Print out the image and the generated caption
-            print(sentence)
-
-            if plot:
-                image = Image.open(image_path)
-                plt.imshow(np.asarray(image))
+                print('Not support for non-RGB image.')
         self.__encoder.train()
         self.__decoder.train()
 
@@ -574,46 +578,50 @@ class ImageDescriptor():
 
             coco_list = coco_ann['caption'].split()
 
-            img = self.__load_image(image_path).to(self.__device)
+            image = Image.open(image_path)
 
-            # generate an caption
-            if not self.__attention_mechanism:
-                feature = self.__encoder(img)
-                sampled_ids = self.__decoder.sample(feature)
-                sampled_ids = sampled_ids[0].cpu().numpy()
+            if np.array(image).ndim == 3:
+                img = self.__load_image(image).to(self.__device)
+
+                # generate an caption
+                if not self.__attention_mechanism:
+                    feature = self.__encoder(img)
+                    sampled_ids = self.__decoder.sample(feature)
+                    sampled_ids = sampled_ids[0].cpu().numpy()
+                else:
+                    feature, cnn_features = self.__encoder(img)
+                    sampled_ids = self.__decoder.sample(feature, cnn_features)
+                    sampled_ids = sampled_ids.cpu().data.numpy()
+
+                # Convert word_ids to words
+                sampled_caption = []
+                for word_id in sampled_ids:
+                    word = self.__vocab.idx2word[word_id]
+                    sampled_caption.append(word)
+                    if word == '<end>':
+                        break
+
+                # strip punctuations and spacing
+                sampled_list = [c for c in sampled_caption[1:-1]
+                                if c not in punctuation]
+
+                score = sentence_bleu(coco_list, sampled_list,
+                                      smoothing_function=SmoothingFunction().method4)
+
+                if plot:
+                    plt.figure()
+                    image = Image.open(image_path)
+                    plt.imshow(np.asarray(image))
+                    plt.title(f'score: {score}')
+                    plt.xlabel(f'file: {image_path}')
+
+                # Print out the generated caption
+                if show_caption:
+                    print(f'Sampled caption:\n{sampled_list}')
+                    print(f'COCO caption:\n{coco_list}')
+
             else:
-                feature, cnn_features = self.__encoder(img)
-                sampled_ids = self.__decoder.sample(feature, cnn_features)
-                sampled_ids = sampled_ids.cpu().data.numpy()
-
-            # Convert word_ids to words
-            sampled_caption = []
-            for word_id in sampled_ids:
-                word = self.__vocab.idx2word[word_id]
-                sampled_caption.append(word)
-                if word == '<end>':
-                    break
-
-            # strip punctuations and spacing
-            sampled_list = [c for c in sampled_caption[1:-1]
-                            if c not in punctuation]
-
-            score = sentence_bleu(coco_list, sampled_list,
-                                  smoothing_function=SmoothingFunction().method4)
-
-            if plot:
-                plt.figure()
-                image = Image.open(image_path)
-                plt.imshow(np.asarray(image))
-                plt.title(f'score: {score}')
-                plt.xlabel(f'file: {image_path}')
-
-            # Print out the generated caption
-            if show_caption:
-                print(f'Sampled caption:\n{sampled_list}')
-                print(f'COCO caption:\n{coco_list}')
-
-        self.__encoder.train()
-        self.__decoder.train()
+                print('Not support for non-RGB image.')
+                return
 
         return score
