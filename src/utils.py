@@ -368,6 +368,7 @@ class ImageDescriptor():
 
             # Save the model checkpoints
             self.save()
+        print("Finish training for {} epochs".format(self.__args.num_epochs))
 
     def evaluate(self, print_info=False):
         '''
@@ -513,7 +514,7 @@ class ImageDescriptor():
             ann_id = self.__coco_val.ids[idx]
             return self.__coco_val.coco.anns[ann_id]
 
-    def bleu_score(self, idx, ds='val', plot=False):
+    def bleu_score(self, idx, ds='val', plot=False, show_caption=False):
         '''
         Evaluate the BLEU score for index `idx` in COCO dataset.
 
@@ -523,6 +524,9 @@ class ImageDescriptor():
             idx (int): index
             ds (str): training or validation dataset
             plot (bool): plot the image or not
+
+        Returns:
+            score (float): bleu score
         '''
         assert(ds == 'train' or 'val')
         self.__encoder.eval()
@@ -587,9 +591,11 @@ class ImageDescriptor():
                 plt.xlabel(f'file: {image_path}')
 
             # Print out the generated caption
-            print(f'Sampled caption:\n{sampled_list}')
-            print(f'COCO caption:\n{coco_list}')
-            print(f'BLEU score: {score:.6f}\n')
+            if show_caption:
+                print(f'Sampled caption:\n{sampled_list}')
+                print(f'COCO caption:\n{coco_list}')
 
         self.__encoder.train()
         self.__decoder.train()
+
+        return score
