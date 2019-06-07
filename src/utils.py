@@ -256,6 +256,8 @@ class ImageDescriptor():
         with open(self.__config_path, 'w') as f:
             print(self, file=f)
 
+        print(f'Save to {file_name}.')
+
     def load(self, file_name=None):
         '''
         Loads the model from the last checkpoint saved on disk.
@@ -279,6 +281,8 @@ class ImageDescriptor():
         except:
             raise FileNotFoundError(
                 'Please check --checkpoint, the name of the file')
+
+        print(f'Load from {file_name}.')
         self.load_state_dict(checkpoint)
         del checkpoint
 
