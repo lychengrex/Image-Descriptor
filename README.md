@@ -2,7 +2,7 @@
 
 Image captioning
 
-* Group Members: [Che-Ming Chia](https://github.com/shoachia), [Shang-Wei Hung](https://github.com/shangweihung), [Tsun-Hsu Lee](https://github.com/thlee-0810)
+* Group Members: [Lin-Ying Cheng](https://github.com/lychengr3x), [Che-Ming Chia](https://github.com/shoachia), [Shang-Wei Hung](https://github.com/shangweihung), [Tsun-Hsu Lee](https://github.com/thlee-0810)
 
 The original code for image captioning is from: [pytorch-tutorial/image-captioning](https://github.com/yunjey/pytorch-tutorial/tree/master/tutorials/03-advanced/image_captioning). We tweak it and add extra functions.
 
@@ -21,13 +21,13 @@ The original code for image captioning is from: [pytorch-tutorial/image-captioni
 
 ## Usage
 
-1. Install required packages
+### 1. Install required packages
 
 ```bash
 pip install -r requirements.txt --user  
 ```
 
-2. Install COCO API  
+### 2. Install COCO API  
 
 ```bash
 git clone https://github.com/pdollar/coco.git
@@ -37,7 +37,9 @@ python setup.py build
 python setup.py install --user
 ```
 
-3. Download Dataset
+### 3. Download Dataset
+
+If you want to use preprocessed dataset, you can skip this step.
 
 ```bash
 cd ../../
@@ -47,7 +49,9 @@ chmod +x download_dataset.sh
 ./download_dataset.sh
 ```
 
-4. Preprocessing
+### 4. Preprocess the data
+
+You can do it **from the scratch**
 
 ```bash
 cd src
@@ -60,7 +64,15 @@ python build_vocab.py --caption_path='../data/annotations/captions_val2014.json'
 python resize.py --image_dir='../data/val2014/'
 ```
 
-5. Train the model in the background save log file  
+, or simply download **preprocessed dataset and trained model**.
+
+* `annotations`: This directory includes two files, `captions_train2014.json` and `captions_val2014.json`. [link](https://drive.google.com/file/d/1KrNtlg5-Z11abTR50iBuIxpPYcS1EjJf/view?usp=sharing)
+  
+* `vocab`: This includes vocabulary of training set and validation set, `vocab.pkl` and `vocab_val.pkl`. [link](https://drive.google.com/file/d/1D4ZeIju-Min-S9BqAh2Odr39MCSsZGty/view?usp=sharing)
+
+* `resize2014`: This directory includes all resized images (`256x256`) of training set and validation set. [link](https://drive.google.com/file/d/1B-q-ZInOvUFntRPq30CXee89o1tB9WPA/view?usp=sharing)
+
+### 5. Train the model in the background save log file  
 
 It takes around 30 minutes.
 
@@ -72,11 +84,15 @@ nohup python main.py --mode='train' > log.txt &
 nohup python main.py --mode='train' --attention=True > log.txt &  
 ```
 
+* Here is one of the pretrained model `resnet101` with 7 epochs. [link](https://drive.google.com/file/d/1WTss11jFJdoZ6XUxNTW8aL-zYlJsi1X1/view?usp=sharing)
+
+* Here is a demo that shows how to train in the jupyter notebook: [`demo_train.ipynb`](src/demo_train.ipynb)
+
 **How to specify a model**:
 
 Take `resnet152` for example. Assign `--encoder=resnet` and `--encoder_ver=152`.
 
-6. Evaluate the model
+### 6. Evaluate the model
 
 To get a caption for a specific image.
 
@@ -96,4 +112,26 @@ nohup python main.py --mode=val --encoder=resnet --encoder_ver=101 --model_dir=.
 
 # with attention layer
 nohup python main.py --mode=val --encoder=resnet --encoder_ver=101 --attention=True --model_dir=../models --checkpoint=epoch-3.ckpt > val_loss_att.txt &
+```
+
+* Here is a demo that shows how to test in the jupyter notebook: [`demo_test.ipynb`](src/demo_test.ipynb)
+
+## File arrangement
+
+If you want to re-run the [`demo_test.ipynb`](src/demo_test.ipynb) directly, make sure you download files from the above links and put them in the right place.
+
+```
+Image-Descriptor/
+    |--- png/
+    |--- src/
+    |--- models/
+          |--- config-resnet101.txt
+          |--- resnet101-epoch-7.ckpt
+    |--- data/
+            |--- resized2014/
+            |--- annotations/
+                    |--- captions_train2014.json
+                    |--- captions_val2014.json
+            |--- vocab.pkl
+            |--- vocab_val.pkl
 ```
