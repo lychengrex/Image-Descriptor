@@ -277,10 +277,10 @@ class ImageDescriptor():
                     'No checkpoint file in the model directory.')
         else:
             file_name = os.path.join(self.__args.model_dir, file_name)
+            print(f'Load from {file_name}.')
 
         try:
             checkpoint = torch.load(file_name, map_location=self.__device)
-            print(f'Load from {file_name}.')
         except:
             raise FileNotFoundError(
                 'Please check --checkpoint, the name of the file')
