@@ -12,7 +12,7 @@ This project is regarding image captioning. We follow most state-of-the-art netw
 
 ## Testing Environment  
 
-* Pytorch version: `1.0.0`
+* Pytorch version: `1.1.0`
 * CUDA version: `9.0.176`
 * Python version: `3.6.8`
 * CPU: Intel(R) Xeon(R) CPU E5-2630 v4 @ 2.20GHz
