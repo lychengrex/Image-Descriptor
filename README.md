@@ -49,6 +49,7 @@ cd coco/PythonAPI/
 make
 python setup.py build
 python setup.py install --user
+
 cd ../../
 git clone https://github.com/lychengr3x/Image-Descriptor.git
 cd Image-Descriptor
@@ -133,7 +134,7 @@ nohup python main.py --mode=val --encoder=resnet --encoder_ver=101 --attention=T
 
 ## File arrangement
 
-If you want to re-run the `demo_testing.ipynb` [(link)](src/demo_testing.ipynb) directly, make sure you download files from the above links and put them in the right place, shown as the following.
+If you want to re-run the `demo_testing.ipynb` [(link)](src/demo_testing.ipynb) directly, make sure you download files from the above links and put them in the right place, shown as the following. Besides, **installing COCO API** is required which is shown at [step 2](#2-install-coco-api).
 ```
 .
 |--- png/
