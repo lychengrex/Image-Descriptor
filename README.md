@@ -78,7 +78,7 @@ python build_vocab.py --caption_path='../data/annotations/captions_val2014.json'
 python resize.py --image_dir='../data/val2014/'
 ```
 
-, or simply download **preprocessed dataset and trained model**.
+, or simply download **preprocessed dataset**.
 
 * `annotations`: This directory includes two files, `captions_train2014.json` and `captions_val2014.json`. [(link)](https://drive.google.com/file/d/1KrNtlg5-Z11abTR50iBuIxpPYcS1EjJf/view?usp=sharing)
   
@@ -102,7 +102,7 @@ nohup python main.py --mode='train' --attention=True > log.txt &
 
 Take `resnet152` for example. Assign `--encoder=resnet` and `--encoder_ver=152`.
 
-* Here are 2 of the pretrained model `resnet101`: `resnet101-epoch-7.ckpt` [(link)](https://drive.google.com/file/d/1WTss11jFJdoZ6XUxNTW8aL-zYlJsi1X1/view?usp=sharing), `resnet101-epoch-15.ckpt` [(link)](https://drive.google.com/file/d/1pSCmjnc_5PDJwD4aAiuAqQ0KA5Lv8DjW/view?usp=sharing)
+* Here are 2 of the **trained** models `resnet101`: `resnet101-epoch-7.ckpt` [(link)](https://drive.google.com/file/d/1WTss11jFJdoZ6XUxNTW8aL-zYlJsi1X1/view?usp=sharing), `resnet101-epoch-15.ckpt` [(link)](https://drive.google.com/file/d/1pSCmjnc_5PDJwD4aAiuAqQ0KA5Lv8DjW/view?usp=sharing)
 
 * Here is a demo that shows how to train in the jupyter notebook: `demo_training.ipynb` [(link)](src/demo_training.ipynb)
 
