@@ -49,6 +49,9 @@ cd coco/PythonAPI/
 make
 python setup.py build
 python setup.py install --user
+cd ../../
+git clone https://github.com/lychengr3x/Image-Descriptor.git
+cd Image-Descriptor
 ```
 
 ### 3. Download Dataset
@@ -56,9 +59,6 @@ python setup.py install --user
 If you want to use preprocessed dataset, you can skip this step.
 
 ```bash
-cd ../../
-git clone https://github.com/lychengr3x/Image-Descriptor.git
-cd Image-Descriptor
 chmod +x download_dataset.sh
 ./download_dataset.sh
 ```
