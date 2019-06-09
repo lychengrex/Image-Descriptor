@@ -1,4 +1,4 @@
-# Image Descriptor with Visual Attention Mechanismusing Long Short-term Memory
+# Image Descriptor with Visual Attention Mechanism Using Long Short-term Memory
 
 This project is regarding image captioning. We follow most state-of-the-art networks based on Convolutional neural networks and Recurrent neural networks (CNN-RNN). We utilize CNN to extract features over the image, and then adopt RNN to generate captions from these features. To address the problem of object missing in the predicted text, we append a attention network to force the visual features to be considered at each time step. We present various configurations of CNN models and using merely LSTM for our RNN model. Throughout this project, we evaluate our networks on MS COCO dataset.
 
