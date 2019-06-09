@@ -1,21 +1,9 @@
 import argparse
 import pickle
-from model import DecoderRNN, ResNet, VGG
-from utils import ImageDescriptor
+import matplotlib.pyplot as plt
+from model import DecoderRNN
+from utils import get_encoder, ImageDescriptor, plot_loss
 from build_vocab import Vocabulary
-
-
-def get_encoder(args):
-    if args.encoder == 'resnet':
-        encoder = ResNet(args.embed_size, ver=args.encoder_ver,
-                         attention_mechanism=args.attention)
-    elif args.encoder == 'vgg':
-        encoder = VGG(args.embed_size, ver=args.encoder_ver,
-                      attention_mechanism=args.attention)
-    else:
-        raise NameError('Not supported pretrained network')
-    return encoder
-
 
 def run(args):
     encoder = get_encoder(args)
@@ -26,7 +14,11 @@ def run(args):
 
     if args.mode == 'train':
         # train the network
-        img_descriptor.train()
+        if args.plot:
+            fig, axes = plt.subplots(ncols=1, figsize=(7,3))
+            img_descriptor.train(plot_loss=lambda model: plot_loss(model, fig=fig, axes=axes))
+        else:
+            img_descriptor.train()
     elif args.mode == 'test':
         # get image caption for one image
         img_descriptor.test(args.image_path, plot=args.plot)
@@ -44,7 +36,7 @@ if __name__ == '__main__':
     parser.add_argument('--encoder_ver', type=int,
                         default='101', help='number of layers of the pretrained network')
     parser.add_argument('--mode', type=str,
-                        default='train', help='train, test or val mode')
+                        default='train', help='train, test or val mode for python in cmd')
     parser.add_argument('--attention', type=bool,
                         default=False, help='use attention layers or not')
     parser.add_argument('--model_dir', type=str,

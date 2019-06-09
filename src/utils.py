@@ -9,6 +9,7 @@ from torch.nn.utils.rnn import pack_padded_sequence
 from model import DecoderRNN
 from data import CocoDataset, collate_fn
 from build_vocab import Vocabulary
+from model import ResNet, VGG
 import torchvision.transforms as transforms
 from PIL import Image
 import matplotlib.pyplot as plt
@@ -16,6 +17,35 @@ from nltk.translate.bleu_score import sentence_bleu
 from nltk.translate.bleu_score import corpus_bleu
 from nltk.translate.bleu_score import SmoothingFunction
 from string import punctuation
+
+
+def get_encoder(args):
+    if args.encoder == 'resnet':
+        encoder = ResNet(args.embed_size, ver=args.encoder_ver,
+                         attention_mechanism=args.attention)
+    elif args.encoder == 'vgg':
+        encoder = VGG(args.embed_size, ver=args.encoder_ver,
+                      attention_mechanism=args.attention)
+    else:
+        raise NameError('Not supported pretrained network')
+    return encoder
+
+
+def plot_loss(model, fig, axes):
+    x_axis = range(1, model.epoch+1)
+    axes.clear()
+    # training loss
+    axes.plot(x_axis, [model.history[k][0]['loss'] for k in range(model.epoch)], '-*',
+              label="training loss")
+    # evaluation loss
+    axes.plot(x_axis, [model.history[k][1]['loss'] for k in range(model.epoch)], '-o',
+              label="evaluation loss")
+    axes.set_xlabel('Epoch')
+    axes.set_ylabel('Loss')
+    axes.legend(('training loss', 'evaluation loss'))
+
+    plt.tight_layout()
+    fig.canvas.draw()
 
 
 class Args():
@@ -220,6 +250,10 @@ class ImageDescriptor():
     def epoch(self):
         return len(self.__history)
 
+    @property
+    def history(self):
+        return self.__history
+
     # @property
     # def mode(self):
     #     return self.__args.mode
@@ -308,10 +342,21 @@ class ImageDescriptor():
                 if isinstance(v, torch.Tensor):
                     state[k] = v.to(self.__device)
 
-    def train(self):
+    def train(self, plot_loss=None):
         '''
         Train the network using backpropagation based
         on the optimizer and the training set.
+
+        Args:
+            plot_loss (func, optional): if not None, should be a function taking a
+                single argument being an experiment (meant to be `self`).
+                Similar to a visitor pattern, this function is meant to inspect
+                the current state of the experiment and display/plot/save
+                statistics. For example, if the experiment is run from a
+                Jupyter notebook, `plot` can be used to display the evolution
+                of the loss with `matplotlib`. If the experiment is run on a
+                server without display, `plot` can be used to show statistics
+                on `stdout` or save statistics in a log file. (default: None)
         '''
         self.__encoder.train()
         self.__decoder.train()
@@ -319,6 +364,10 @@ class ImageDescriptor():
         total_step = len(self.__train_loader)
         start_epoch = self.epoch
         print("Start/Continue training from epoch {}".format(start_epoch))
+
+        if plot_loss is not None:
+            plot_loss(self)
+
         for epoch in range(start_epoch, self.__args.num_epochs):
             t_start = time.time()
             self.__stats_manager.init()
@@ -374,6 +423,10 @@ class ImageDescriptor():
 
             # Save the model checkpoints
             self.save()
+
+            if plot_loss is not None:
+                plot_loss(self)
+
         print("Finish training for {} epochs".format(self.__args.num_epochs))
 
     def evaluate(self, print_info=False):
