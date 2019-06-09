@@ -155,7 +155,7 @@ class ImageDescriptorStatsManager(StatsManager):
         """
         # compute loss from StatsManager
         super(ImageDescriptorStatsManager, self).accumulate(loss)
-        # compute perplexity here (assume d is perplexity)
+        # compute perplexity here
         self.running_perplexity += perplexity
 
     def summarize(self):
@@ -177,9 +177,8 @@ class ImageDescriptor():
         if not os.path.exists(args.model_dir):
             os.makedirs(args.model_dir)
 
-        # self.__config_path = os.path.join(
-        #     args.model_dir, f'config-{args.encoder}{args.encoder_ver}.txt')
-        self.__config_path = os.path.join(args.model_dir, 'config.txt')
+        self.__config_path = os.path.join(
+            args.model_dir, f'config-{args.encoder}{args.encoder_ver}.txt')
 
         # Device configuration
         self.__device = torch.device(
